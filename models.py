@@ -5,6 +5,8 @@ These models provide structured, well-documented data types for all YNAB API res
 including detailed explanations of YNAB's data model subtleties and conventions.
 """
 
+from decimal import Decimal
+from datetime import date, datetime
 from typing import List, Optional
 from pydantic import BaseModel, Field
 
@@ -25,9 +27,9 @@ class Budget(BaseModel):
     """A YNAB budget with metadata and currency information."""
     id: str = Field(..., description="Unique budget identifier")
     name: str = Field(..., description="User-defined budget name")
-    last_modified_on: Optional[str] = Field(None, description="ISO 8601 timestamp of last modification (UTC)")
-    first_month: Optional[str] = Field(None, description="First month available in this budget (YYYY-MM-DD)")
-    last_month: Optional[str] = Field(None, description="Last month available in this budget (YYYY-MM-DD)")
+    last_modified_on: Optional[datetime] = Field(None, description="Timestamp of last modification (UTC)")
+    first_month: Optional[date] = Field(None, description="First month available in this budget")
+    last_month: Optional[date] = Field(None, description="Last month available in this budget")
     currency_format: Optional[CurrencyFormat] = Field(None, description="Currency formatting rules for this budget")
 
 
@@ -45,7 +47,7 @@ class Account(BaseModel):
     """A YNAB account with balance information.
     
     Note: All balance amounts are provided in both milliunits (YNAB's internal format where 
-    1000 milliunits = 1 currency unit) and converted currency amounts for convenience.
+    1000 milliunits = 1 currency unit) and converted currency amounts using Decimal for precision.
     """
     id: str = Field(..., description="Unique account identifier")
     name: str = Field(..., description="User-defined account name")
@@ -53,14 +55,14 @@ class Account(BaseModel):
     on_budget: bool = Field(..., description="Whether this account is included in budget calculations")
     closed: bool = Field(..., description="Whether this account has been closed")
     note: Optional[str] = Field(None, description="User-defined account notes")
-    balance: Optional[float] = Field(None, description="Current account balance in currency units")
-    cleared_balance: Optional[float] = Field(None, description="Balance of cleared transactions in currency units")
-    uncleared_balance: Optional[float] = Field(None, description="Balance of uncleared transactions in currency units")
+    balance: Optional[Decimal] = Field(None, description="Current account balance in currency units")
+    cleared_balance: Optional[Decimal] = Field(None, description="Balance of cleared transactions in currency units")
+    uncleared_balance: Optional[Decimal] = Field(None, description="Balance of uncleared transactions in currency units")
     transfer_payee_id: Optional[str] = Field(None, description="ID of the payee used for transfers to this account")
     direct_import_linked: Optional[bool] = Field(None, description="Whether account is linked for direct import")
     direct_import_in_error: Optional[bool] = Field(None, description="Whether direct import is currently in error state")
-    last_reconciled_at: Optional[str] = Field(None, description="ISO 8601 timestamp of last reconciliation (UTC)")
-    debt_original_balance: Optional[float] = Field(None, description="Original balance for debt accounts in currency units")
+    last_reconciled_at: Optional[datetime] = Field(None, description="Timestamp of last reconciliation (UTC)")
+    debt_original_balance: Optional[Decimal] = Field(None, description="Original balance for debt accounts in currency units")
 
 
 class Category(BaseModel):
@@ -78,13 +80,13 @@ class Category(BaseModel):
     category_group_name: Optional[str] = Field(None, description="Name of the category group (included in list_categories)")
     hidden: bool = Field(..., description="Whether this category is hidden from normal budget view")
     note: Optional[str] = Field(None, description="User-defined category notes")
-    budgeted: Optional[float] = Field(None, description="Amount budgeted for this category in currency units")
-    activity: Optional[float] = Field(None, description="Total spending activity (negative = spending, positive = income)")
-    balance: Optional[float] = Field(None, description="Available balance (budgeted + activity)")
+    budgeted: Optional[Decimal] = Field(None, description="Amount budgeted for this category in currency units")
+    activity: Optional[Decimal] = Field(None, description="Total spending activity (negative = spending, positive = income)")
+    balance: Optional[Decimal] = Field(None, description="Available balance (budgeted + activity)")
     goal_type: Optional[str] = Field(None, description="Type of goal set for this category (NEED, TB, TBD, MF)")
-    goal_target: Optional[float] = Field(None, description="Target amount for the goal in currency units")
+    goal_target: Optional[Decimal] = Field(None, description="Target amount for the goal in currency units")
     goal_percentage_complete: Optional[int] = Field(None, description="Percentage of goal completed (0-100)")
-    goal_under_funded: Optional[float] = Field(None, description="Amount still needed to meet goal in currency units")
+    goal_under_funded: Optional[Decimal] = Field(None, description="Amount still needed to meet goal in currency units")
     budgeted_milliunits: Optional[int] = Field(None, description="Raw budgeted amount in YNAB milliunits (1000 = 1 currency unit)")
     activity_milliunits: Optional[int] = Field(None, description="Raw activity amount in YNAB milliunits")
     balance_milliunits: Optional[int] = Field(None, description="Raw balance amount in YNAB milliunits")
@@ -100,9 +102,9 @@ class CategoryGroup(BaseModel):
     name: str = Field(..., description="User-defined category group name")
     hidden: bool = Field(..., description="Whether this category group is hidden from normal budget view")
     category_count: int = Field(..., description="Number of non-deleted categories in this group")
-    total_budgeted: Optional[float] = Field(None, description="Sum of budgeted amounts for all categories in this group")
-    total_activity: Optional[float] = Field(None, description="Sum of activity for all categories in this group")
-    total_balance: Optional[float] = Field(None, description="Sum of balances for all categories in this group")
+    total_budgeted: Optional[Decimal] = Field(None, description="Sum of budgeted amounts for all categories in this group")
+    total_activity: Optional[Decimal] = Field(None, description="Sum of activity for all categories in this group")
+    total_balance: Optional[Decimal] = Field(None, description="Sum of balances for all categories in this group")
 
 
 class BudgetMonth(BaseModel):
@@ -111,12 +113,12 @@ class BudgetMonth(BaseModel):
     Provides complete monthly budget information including income, total budgeted amounts,
     spending activity, and detailed category breakdowns.
     """
-    month: Optional[str] = Field(None, description="Budget month in YYYY-MM-DD format")
+    month: Optional[date] = Field(None, description="Budget month date")
     note: Optional[str] = Field(None, description="User-defined notes for this budget month")
-    income: Optional[float] = Field(None, description="Total income for the month in currency units")
-    budgeted: Optional[float] = Field(None, description="Total amount budgeted across all categories")
-    activity: Optional[float] = Field(None, description="Total spending activity for the month")
-    to_be_budgeted: Optional[float] = Field(None, description="Amount remaining to be budgeted (can be negative)")
+    income: Optional[Decimal] = Field(None, description="Total income for the month in currency units")
+    budgeted: Optional[Decimal] = Field(None, description="Total amount budgeted across all categories")
+    activity: Optional[Decimal] = Field(None, description="Total spending activity for the month")
+    to_be_budgeted: Optional[Decimal] = Field(None, description="Amount remaining to be budgeted (can be negative)")
     age_of_money: Optional[int] = Field(None, description="Age of money in days (how long money sits before being spent)")
     categories: List[Category] = Field(..., description="List of categories with their monthly budget data")
     income_milliunits: Optional[int] = Field(None, description="Raw income amount in YNAB milliunits")
