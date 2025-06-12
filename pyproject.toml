@@ -1,0 +1,11 @@
+[project]
+name = "you-need-an-mcp"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "fastmcp>=2.8.0",
+    "pydantic>=2.11.5",
+    "ynab>=1.4.0",
+]
