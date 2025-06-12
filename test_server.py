@@ -12,7 +12,6 @@ from datetime import datetime, date
 from unittest.mock import patch, Mock, MagicMock
 from fastmcp import Client
 
-from models import Budget, Account, Category, CategoryGroup, BudgetMonth, CurrencyFormat, PaginationInfo
 import server
 
 
@@ -57,7 +56,7 @@ class TestUtilityFunctions:
         with patch('ynab.Configuration') as mock_config, \
              patch('ynab.ApiClient') as mock_client:
             
-            result = server.get_ynab_client()
+            server.get_ynab_client()
             mock_config.assert_called_once_with(access_token="test_token")
             mock_client.assert_called_once()
 
@@ -133,42 +132,47 @@ def mock_env_vars(monkeypatch):
 
 
 class TestMCPTools:
-    """Test all MCP tools using FastMCP testing patterns."""
+    """Test all MCP tools using FastMCP testing patterns with real YNAB models."""
     
     @pytest.mark.asyncio
     async def test_list_budgets_success(self, mock_env_vars):
-        """Test successful budget listing."""
+        """Test successful budget listing using real YNAB models."""
+        import ynab
+        
         with patch('server.get_ynab_client') as mock_get_client:
-            # Create mock context manager
             mock_client = MagicMock()
             mock_client.__enter__.return_value = mock_client
             mock_client.__exit__.return_value = None
             mock_get_client.return_value = mock_client
             
-            # Setup mock budget data
-            mock_budget = Mock()
-            mock_budget.id = "budget-123"
-            mock_budget.name = "Test Budget"
-            mock_budget.last_modified_on = datetime(2024, 1, 15, 10, 30, 0)
-            mock_budget.first_month = date(2024, 1, 1)  # YNAB returns date, not datetime
-            mock_budget.last_month = date(2024, 12, 1)   # YNAB returns date, not datetime
+            # Create budget with currency format using real YNAB models
+            currency_format = ynab.CurrencyFormat(
+                iso_code="USD",
+                example_format="$123.45",
+                decimal_digits=2,
+                decimal_separator=".",
+                symbol_first=True,
+                group_separator=",",
+                currency_symbol="$",
+                display_symbol=True
+            )
             
-            mock_currency_format = Mock()
-            mock_currency_format.iso_code = "USD"
-            mock_currency_format.example_format = "$123.45"
-            mock_currency_format.decimal_digits = 2
-            mock_currency_format.decimal_separator = "."
-            mock_currency_format.symbol_first = True
-            mock_currency_format.group_separator = ","
-            mock_currency_format.currency_symbol = "$"
-            mock_currency_format.display_symbol = True
-            mock_budget.currency_format = mock_currency_format
+            test_budget = ynab.BudgetSummary(
+                id="budget-123",
+                name="Test Budget",
+                last_modified_on=None,
+                first_month=None,
+                last_month=None,
+                date_format=None,
+                currency_format=currency_format,
+                accounts=None
+            )
             
-            mock_response = Mock()
-            mock_response.data.budgets = [mock_budget]
-            
+            budgets_response = ynab.BudgetSummaryResponse(
+                data=ynab.BudgetSummaryResponseData(budgets=[test_budget])
+            )
             mock_budgets_api = Mock()
-            mock_budgets_api.get_budgets.return_value = mock_response
+            mock_budgets_api.get_budgets.return_value = budgets_response
             
             with patch('ynab.BudgetsApi', return_value=mock_budgets_api):
                 async with Client(server.mcp) as client:
@@ -180,29 +184,36 @@ class TestMCPTools:
                     # budgets_data is a single Budget object, not a list
                     assert budgets_data['id'] == "budget-123"
                     assert budgets_data['name'] == "Test Budget"
+                    assert budgets_data['currency_format']['iso_code'] == "USD"
 
     @pytest.mark.asyncio
     async def test_list_budgets_null_currency(self, mock_env_vars):
-        """Test budget listing with null currency format."""
+        """Test budget listing with null currency format using real YNAB models."""
+        import ynab
+        
         with patch('server.get_ynab_client') as mock_get_client:
             mock_client = MagicMock()
             mock_client.__enter__.return_value = mock_client
             mock_client.__exit__.return_value = None
             mock_get_client.return_value = mock_client
             
-            mock_budget = Mock()
-            mock_budget.id = "budget-456"
-            mock_budget.name = "Budget No Currency"
-            mock_budget.last_modified_on = None
-            mock_budget.first_month = None
-            mock_budget.last_month = None
-            mock_budget.currency_format = None
+            # Create budget with null currency using real YNAB model
+            test_budget = ynab.BudgetSummary(
+                id="budget-456",
+                name="Budget No Currency", 
+                last_modified_on=None,
+                first_month=None,
+                last_month=None,
+                date_format=None,
+                currency_format=None,
+                accounts=None
+            )
             
-            mock_response = Mock()
-            mock_response.data.budgets = [mock_budget]
-            
+            budgets_response = ynab.BudgetSummaryResponse(
+                data=ynab.BudgetSummaryResponseData(budgets=[test_budget])
+            )
             mock_budgets_api = Mock()
-            mock_budgets_api.get_budgets.return_value = mock_response
+            mock_budgets_api.get_budgets.return_value = budgets_response
             
             with patch('ynab.BudgetsApi', return_value=mock_budgets_api):
                 async with Client(server.mcp) as client:
@@ -215,51 +226,63 @@ class TestMCPTools:
 
     @pytest.mark.asyncio
     async def test_list_accounts_success(self, mock_env_vars):
-        """Test successful account listing."""
+        """Test successful account listing using real YNAB models."""
+        import ynab
+        
         with patch('server.get_ynab_client') as mock_get_client:
             mock_client = MagicMock()
             mock_client.__enter__.return_value = mock_client
             mock_client.__exit__.return_value = None
             mock_get_client.return_value = mock_client
             
-            # Create mock accounts
-            mock_account1 = Mock()
-            mock_account1.id = "acc-1"
-            mock_account1.name = "Checking"
-            mock_account1.type = "checking"
-            mock_account1.on_budget = True
-            mock_account1.closed = False
-            mock_account1.note = "Main account"
-            mock_account1.balance = 100000  # $100.00
-            mock_account1.cleared_balance = 95000
-            mock_account1.uncleared_balance = 5000
-            mock_account1.transfer_payee_id = "payee-1"
-            mock_account1.direct_import_linked = True
-            mock_account1.direct_import_in_error = False
-            mock_account1.last_reconciled_at = datetime(2024, 1, 10, 9, 0, 0)
-            mock_account1.debt_original_balance = None
+            # Create accounts using real YNAB models
+            open_account = ynab.Account(
+                id="acc-1",
+                name="Checking",
+                type="checking",
+                on_budget=True,
+                closed=False,
+                note="Main account",
+                balance=100000,  # $100.00
+                cleared_balance=95000,
+                uncleared_balance=5000,
+                transfer_payee_id="payee-1",
+                direct_import_linked=True,
+                direct_import_in_error=False,
+                last_reconciled_at=datetime(2024, 1, 10, 9, 0, 0),
+                debt_original_balance=None,
+                debt_interest_rates=None,
+                debt_minimum_payments=None,
+                debt_escrow_amounts=None,
+                deleted=False
+            )
             
-            mock_account2 = Mock()
-            mock_account2.id = "acc-2"
-            mock_account2.name = "Savings"
-            mock_account2.type = "savings"
-            mock_account2.on_budget = False
-            mock_account2.closed = True  # Closed account - should be excluded
-            mock_account2.note = None
-            mock_account2.balance = 0
-            mock_account2.cleared_balance = 0
-            mock_account2.uncleared_balance = 0
-            mock_account2.transfer_payee_id = None
-            mock_account2.direct_import_linked = False
-            mock_account2.direct_import_in_error = False
-            mock_account2.last_reconciled_at = None
-            mock_account2.debt_original_balance = None
+            closed_account = ynab.Account(
+                id="acc-2",
+                name="Savings",
+                type="savings",
+                on_budget=False,
+                closed=True,  # Closed account - should be excluded
+                note=None,
+                balance=0,
+                cleared_balance=0,
+                uncleared_balance=0,
+                transfer_payee_id=None,
+                direct_import_linked=False,
+                direct_import_in_error=False,
+                last_reconciled_at=None,
+                debt_original_balance=None,
+                debt_interest_rates=None,
+                debt_minimum_payments=None,
+                debt_escrow_amounts=None,
+                deleted=False
+            )
             
-            mock_response = Mock()
-            mock_response.data.accounts = [mock_account1, mock_account2]
-            
+            accounts_response = ynab.AccountsResponse(
+                data=ynab.AccountsResponseData(accounts=[open_account, closed_account], server_knowledge=0)
+            )
             mock_accounts_api = Mock()
-            mock_accounts_api.get_accounts.return_value = mock_response
+            mock_accounts_api.get_accounts.return_value = accounts_response
             
             with patch('ynab.AccountsApi', return_value=mock_accounts_api):
                 async with Client(server.mcp) as client:
@@ -274,34 +297,41 @@ class TestMCPTools:
 
     @pytest.mark.asyncio
     async def test_list_accounts_include_closed(self, mock_env_vars):
-        """Test account listing including closed accounts."""
+        """Test account listing including closed accounts using real YNAB models."""
+        import ynab
+        
         with patch('server.get_ynab_client') as mock_get_client:
             mock_client = MagicMock()
             mock_client.__enter__.return_value = mock_client
             mock_client.__exit__.return_value = None
             mock_get_client.return_value = mock_client
             
-            mock_account = Mock()
-            mock_account.id = "acc-closed"
-            mock_account.name = "Closed Account"
-            mock_account.type = "savings"
-            mock_account.on_budget = False
-            mock_account.closed = True
-            mock_account.note = None
-            mock_account.balance = 0
-            mock_account.cleared_balance = 0
-            mock_account.uncleared_balance = 0
-            mock_account.transfer_payee_id = None
-            mock_account.direct_import_linked = False
-            mock_account.direct_import_in_error = False
-            mock_account.last_reconciled_at = None
-            mock_account.debt_original_balance = None
+            closed_account = ynab.Account(
+                id="acc-closed",
+                name="Closed Account",
+                type="savings",
+                on_budget=False,
+                closed=True,
+                note=None,
+                balance=0,
+                cleared_balance=0,
+                uncleared_balance=0,
+                transfer_payee_id=None,
+                direct_import_linked=False,
+                direct_import_in_error=False,
+                last_reconciled_at=None,
+                debt_original_balance=None,
+                debt_interest_rates=None,
+                debt_minimum_payments=None,
+                debt_escrow_amounts=None,
+                deleted=False
+            )
             
-            mock_response = Mock()
-            mock_response.data.accounts = [mock_account]
-            
+            accounts_response = ynab.AccountsResponse(
+                data=ynab.AccountsResponseData(accounts=[closed_account], server_knowledge=0)
+            )
             mock_accounts_api = Mock()
-            mock_accounts_api.get_accounts.return_value = mock_response
+            mock_accounts_api.get_accounts.return_value = accounts_response
             
             with patch('ynab.AccountsApi', return_value=mock_accounts_api):
                 async with Client(server.mcp) as client:
@@ -314,54 +344,83 @@ class TestMCPTools:
 
     @pytest.mark.asyncio
     async def test_list_categories_success(self, mock_env_vars):
-        """Test successful category listing."""
+        """Test successful category listing using real YNAB models."""
+        import ynab
+        
         with patch('server.get_ynab_client') as mock_get_client:
             mock_client = MagicMock()
             mock_client.__enter__.return_value = mock_client
             mock_client.__exit__.return_value = None
             mock_get_client.return_value = mock_client
             
-            # Create mock category group and categories
-            mock_category_group = Mock()
-            mock_category_group.name = "Monthly Bills"
+            # Create categories using real YNAB models
+            visible_category = ynab.Category(
+                id="cat-1",
+                category_group_id="group-1",
+                category_group_name="Monthly Bills",
+                name="Groceries",
+                hidden=False,
+                original_category_group_id=None,
+                note="Food shopping",
+                budgeted=50000,
+                activity=-30000,
+                balance=20000,
+                goal_type="TB",
+                goal_needs_whole_amount=None,
+                goal_day=None,
+                goal_cadence=None,
+                goal_cadence_frequency=None,
+                goal_creation_month=None,
+                goal_target=100000,
+                goal_target_month=None,
+                goal_percentage_complete=50,
+                goal_months_to_budget=None,
+                goal_under_funded=0,
+                goal_overall_funded=None,
+                goal_overall_left=None,
+                deleted=False
+            )
             
-            mock_category = Mock()
-            mock_category.id = "cat-1"
-            mock_category.name = "Groceries"
-            mock_category.category_group_id = "group-1"
-            mock_category.hidden = False
-            mock_category.deleted = False
-            mock_category.note = "Food shopping"
-            mock_category.budgeted = 50000
-            mock_category.activity = -30000
-            mock_category.balance = 20000
-            mock_category.goal_type = "TB"
-            mock_category.goal_target = 100000
-            mock_category.goal_percentage_complete = 50
-            mock_category.goal_under_funded = 0
+            hidden_category = ynab.Category(
+                id="cat-hidden",
+                category_group_id="group-1",
+                category_group_name="Monthly Bills",
+                name="Hidden Category",
+                hidden=True,  # Should be excluded by default
+                original_category_group_id=None,
+                note=None,
+                budgeted=10000,
+                activity=0,
+                balance=10000,
+                goal_type=None,
+                goal_needs_whole_amount=None,
+                goal_day=None,
+                goal_cadence=None,
+                goal_cadence_frequency=None,
+                goal_creation_month=None,
+                goal_target=None,
+                goal_target_month=None,
+                goal_percentage_complete=None,
+                goal_months_to_budget=None,
+                goal_under_funded=None,
+                goal_overall_funded=None,
+                goal_overall_left=None,
+                deleted=False
+            )
             
-            mock_hidden_category = Mock()
-            mock_hidden_category.id = "cat-hidden"
-            mock_hidden_category.name = "Hidden Category"
-            mock_hidden_category.category_group_id = "group-1"
-            mock_hidden_category.hidden = True  # Should be excluded by default
-            mock_hidden_category.deleted = False
-            mock_hidden_category.note = None
-            mock_hidden_category.budgeted = 10000
-            mock_hidden_category.activity = 0
-            mock_hidden_category.balance = 10000
-            mock_hidden_category.goal_type = None
-            mock_hidden_category.goal_target = None
-            mock_hidden_category.goal_percentage_complete = None
-            mock_hidden_category.goal_under_funded = None
+            category_group = ynab.CategoryGroupWithCategories(
+                id="group-1",
+                name="Monthly Bills",
+                hidden=False,
+                deleted=False,
+                categories=[visible_category, hidden_category]
+            )
             
-            mock_category_group.categories = [mock_category, mock_hidden_category]
-            
-            mock_response = Mock()
-            mock_response.data.category_groups = [mock_category_group]
-            
+            categories_response = ynab.CategoriesResponse(
+                data=ynab.CategoriesResponseData(category_groups=[category_group], server_knowledge=0)
+            )
             mock_categories_api = Mock()
-            mock_categories_api.get_categories.return_value = mock_response
+            mock_categories_api.get_categories.return_value = categories_response
             
             with patch('ynab.CategoriesApi', return_value=mock_categories_api):
                 async with Client(server.mcp) as client:
@@ -507,6 +566,64 @@ class TestMCPTools:
                     assert response_data['id'] == "cat-123"
                     assert response_data['name'] == "Groceries"
                     assert response_data['note'] == "Food shopping"
+
+    @pytest.mark.asyncio
+    async def test_get_month_category_by_id_default_budget(self, mock_env_vars):
+        """Test month category retrieval using default budget ID."""
+        import ynab
+        
+        with patch('server.get_ynab_client') as mock_get_client:
+            mock_client = MagicMock()
+            mock_client.__enter__.return_value = mock_client
+            mock_client.__exit__.return_value = None
+            mock_get_client.return_value = mock_client
+            
+            # Create category using real YNAB model
+            test_category = ynab.Category(
+                id="cat-default",
+                category_group_id="group-1",
+                category_group_name="Default Group",
+                name="Default Category",
+                hidden=False,
+                original_category_group_id=None,
+                note="Using default budget",
+                budgeted=25000,
+                activity=-15000,
+                balance=10000,
+                goal_type="TB",
+                goal_needs_whole_amount=None,
+                goal_day=None,
+                goal_cadence=None,
+                goal_cadence_frequency=None,
+                goal_creation_month=None,
+                goal_target=50000,
+                goal_target_month=None,
+                goal_percentage_complete=50,
+                goal_months_to_budget=None,
+                goal_under_funded=0,
+                goal_overall_funded=None,
+                goal_overall_left=None,
+                deleted=False
+            )
+            
+            category_response = ynab.CategoryResponse(
+                data=ynab.CategoryResponseData(category=test_category, server_knowledge=0)
+            )
+            mock_months_api = Mock()
+            mock_months_api.get_month_category_by_id.return_value = category_response
+            
+            with patch('ynab.MonthsApi', return_value=mock_months_api):
+                async with Client(server.mcp) as client:
+                    # Call without budget_id to trigger get_default_budget_id() - this covers line 475
+                    result = await client.call_tool("get_month_category_by_id", {
+                        "category_id": "cat-default"
+                    })
+                    
+                    assert len(result) == 1
+                    response_data = json.loads(result[0].text)
+                    assert response_data['id'] == "cat-default"
+                    assert response_data['name'] == "Default Category"
+                    assert response_data['note'] == "Using default budget"
 
     @pytest.mark.asyncio
     async def test_list_categories_with_deleted_categories(self, mock_env_vars):
@@ -992,7 +1109,6 @@ class TestDataTypeHandling:
     @pytest.mark.asyncio
     async def test_budget_month_date_vs_datetime_handling(self, mock_env_vars):
         """Test that budget month properly distinguishes between date and datetime fields."""
-        from datetime import timezone
         
         with patch('server.get_ynab_client') as mock_get_client:
             mock_client = MagicMock()
