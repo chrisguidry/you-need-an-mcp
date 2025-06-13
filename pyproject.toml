@@ -17,3 +17,35 @@ dev = [
     "pytest-cov>=6.2.1",
     "pytest-xdist>=3.7.0",
 ]
+
+[tool.pytest.ini_options]
+addopts = [
+    "--cov=server",
+    "--cov=models", 
+    "--cov=test_server",
+    "--cov-branch",
+    "--cov-report=term-missing",
+    "--cov-fail-under=100"
+]
+asyncio_mode = "auto"
+testpaths = [
+    "test_server.py"
+]
+
+[tool.coverage.run]
+branch = true
+source = ["server", "models", "test_server"]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "if self.debug:",
+    "if settings.DEBUG",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if 0:",
+    "if __name__ == .__main__.:",
+    "class .*\\bProtocol\\):",
+    "@(abc\\.)?abstractmethod"
+]

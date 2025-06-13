@@ -123,6 +123,101 @@ class TestUtilityFunctions:
         with pytest.raises(ValueError, match="Invalid month value: invalid"):
             server.convert_month_to_date("invalid")
 
+    def test_budget_id_or_default_with_value(self):
+        """Test budget_id_or_default returns provided value when not None."""
+        result = server.budget_id_or_default("custom-budget-123")
+        assert result == "custom-budget-123"
+
+    def test_budget_id_or_default_with_none(self, monkeypatch):
+        """Test budget_id_or_default returns default when None."""
+        monkeypatch.setenv("YNAB_DEFAULT_BUDGET", "default-budget-456")
+        result = server.budget_id_or_default(None)
+        assert result == "default-budget-456"
+
+    def test_budget_id_or_default_with_none_missing_env(self, monkeypatch):
+        """Test budget_id_or_default raises error when None and no env var."""
+        monkeypatch.delenv("YNAB_DEFAULT_BUDGET", raising=False)
+        with pytest.raises(ValueError, match="budget_id is required"):
+            server.budget_id_or_default(None)
+
+    def test_convert_transaction_to_model_basic(self):
+        """Test convert_transaction_to_model with basic transaction."""
+        from unittest.mock import Mock
+        
+        mock_txn = Mock()
+        mock_txn.id = "txn-123"
+        mock_txn.var_date = date(2024, 6, 15)
+        mock_txn.amount = -50000
+        mock_txn.memo = "Test transaction"
+        mock_txn.cleared = "cleared"
+        mock_txn.approved = True
+        mock_txn.flag_color = "red"
+        mock_txn.account_id = "acc-1"
+        mock_txn.payee_id = "payee-1"
+        mock_txn.category_id = "cat-1"
+        mock_txn.transfer_account_id = None
+        mock_txn.transfer_transaction_id = None
+        mock_txn.matched_transaction_id = None
+        mock_txn.import_id = None
+        mock_txn.import_payee_name = None
+        mock_txn.import_payee_name_original = None
+        mock_txn.debt_transaction_type = None
+        mock_txn.deleted = False
+        mock_txn.subtransactions = None
+        
+        # Test with attributes present (TransactionDetail)
+        mock_txn.account_name = "Checking"
+        mock_txn.payee_name = "Test Payee"
+        mock_txn.category_name = "Test Category"
+        
+        result = server.convert_transaction_to_model(mock_txn)
+        
+        assert result.id == "txn-123"
+        assert result.date == date(2024, 6, 15)
+        assert result.amount == Decimal("-50")
+        assert result.account_name == "Checking"
+        assert result.payee_name == "Test Payee"
+        assert result.category_name == "Test Category"
+        assert result.subtransactions is None
+
+    def test_convert_transaction_to_model_without_optional_attributes(self):
+        """Test convert_transaction_to_model with HybridTransaction (missing some attributes)."""
+        from unittest.mock import Mock
+        
+        mock_txn = Mock()
+        mock_txn.id = "txn-456"
+        mock_txn.var_date = date(2024, 6, 16)
+        mock_txn.amount = -25000
+        mock_txn.memo = "Hybrid transaction"
+        mock_txn.cleared = "uncleared"
+        mock_txn.approved = True
+        mock_txn.flag_color = None
+        mock_txn.account_id = "acc-2"
+        mock_txn.payee_id = "payee-2"
+        mock_txn.category_id = "cat-2"
+        mock_txn.transfer_account_id = None
+        mock_txn.transfer_transaction_id = None
+        mock_txn.matched_transaction_id = None
+        mock_txn.import_id = None
+        mock_txn.import_payee_name = None
+        mock_txn.import_payee_name_original = None
+        mock_txn.debt_transaction_type = None
+        mock_txn.deleted = False
+        
+        # HybridTransaction doesn't have these attributes
+        del mock_txn.account_name
+        del mock_txn.payee_name  
+        del mock_txn.category_name
+        del mock_txn.subtransactions
+        
+        result = server.convert_transaction_to_model(mock_txn)
+        
+        assert result.id == "txn-456"
+        assert result.account_name is None
+        assert result.payee_name is None
+        assert result.category_name is None
+        assert result.subtransactions is None
+
 
 @pytest.fixture
 def mock_env_vars(monkeypatch):
@@ -295,52 +390,6 @@ class TestMCPTools:
                     assert response_data['accounts'][0]['id'] == "acc-1"
                     assert response_data['accounts'][0]['name'] == "Checking"
 
-    @pytest.mark.asyncio
-    async def test_list_accounts_include_closed(self, mock_env_vars):
-        """Test account listing including closed accounts using real YNAB models."""
-        import ynab
-        
-        with patch('server.get_ynab_client') as mock_get_client:
-            mock_client = MagicMock()
-            mock_client.__enter__.return_value = mock_client
-            mock_client.__exit__.return_value = None
-            mock_get_client.return_value = mock_client
-            
-            closed_account = ynab.Account(
-                id="acc-closed",
-                name="Closed Account",
-                type="savings",
-                on_budget=False,
-                closed=True,
-                note=None,
-                balance=0,
-                cleared_balance=0,
-                uncleared_balance=0,
-                transfer_payee_id=None,
-                direct_import_linked=False,
-                direct_import_in_error=False,
-                last_reconciled_at=None,
-                debt_original_balance=None,
-                debt_interest_rates=None,
-                debt_minimum_payments=None,
-                debt_escrow_amounts=None,
-                deleted=False
-            )
-            
-            accounts_response = ynab.AccountsResponse(
-                data=ynab.AccountsResponseData(accounts=[closed_account], server_knowledge=0)
-            )
-            mock_accounts_api = Mock()
-            mock_accounts_api.get_accounts.return_value = accounts_response
-            
-            with patch('ynab.AccountsApi', return_value=mock_accounts_api):
-                async with Client(server.mcp) as client:
-                    result = await client.call_tool("list_accounts", {"include_closed": True})
-                    
-                    assert len(result) == 1
-                    response_data = json.loads(result[0].text)
-                    assert len(response_data['accounts']) == 1
-                    assert response_data['accounts'][0]['id'] == "acc-closed"
 
     @pytest.mark.asyncio
     async def test_list_categories_success(self, mock_env_vars):
@@ -625,130 +674,8 @@ class TestMCPTools:
                     assert response_data['name'] == "Default Category"
                     assert response_data['note'] == "Using default budget"
 
-    @pytest.mark.asyncio
-    async def test_list_categories_with_deleted_categories(self, mock_env_vars):
-        """Test category listing filters out deleted categories."""
-        with patch('server.get_ynab_client') as mock_get_client:
-            mock_client = MagicMock()
-            mock_client.__enter__.return_value = mock_client
-            mock_client.__exit__.return_value = None
-            mock_get_client.return_value = mock_client
-            
-            # Create mock category group and categories
-            mock_category_group = Mock()
-            mock_category_group.name = "Monthly Bills"
-            
-            mock_deleted_category = Mock()
-            mock_deleted_category.id = "cat-deleted"
-            mock_deleted_category.name = "Deleted Category"
-            mock_deleted_category.category_group_id = "group-1"
-            mock_deleted_category.hidden = False
-            mock_deleted_category.deleted = True  # Should be excluded
-            mock_deleted_category.note = "Deleted"
-            mock_deleted_category.budgeted = 0
-            mock_deleted_category.activity = 0
-            mock_deleted_category.balance = 0
-            mock_deleted_category.goal_type = None
-            mock_deleted_category.goal_target = None
-            mock_deleted_category.goal_percentage_complete = None
-            mock_deleted_category.goal_under_funded = None
-            
-            mock_category_group.categories = [mock_deleted_category]
-            
-            mock_response = Mock()
-            mock_response.data.category_groups = [mock_category_group]
-            
-            mock_categories_api = Mock()
-            mock_categories_api.get_categories.return_value = mock_response
-            
-            with patch('ynab.CategoriesApi', return_value=mock_categories_api):
-                async with Client(server.mcp) as client:
-                    result = await client.call_tool("list_categories", {})
-                    
-                    assert len(result) == 1
-                    response_data = json.loads(result[0].text)
-                    # Should exclude deleted category
-                    assert len(response_data['categories']) == 0
 
-    @pytest.mark.asyncio
-    async def test_list_category_groups_with_deleted_group(self, mock_env_vars):
-        """Test category group listing filters out deleted groups."""
-        with patch('server.get_ynab_client') as mock_get_client:
-            mock_client = MagicMock()
-            mock_client.__enter__.return_value = mock_client
-            mock_client.__exit__.return_value = None
-            mock_get_client.return_value = mock_client
-            
-            mock_category_group = Mock()
-            mock_category_group.id = "group-deleted"
-            mock_category_group.name = "Deleted Group"
-            mock_category_group.hidden = False
-            mock_category_group.deleted = True  # Should be excluded
-            mock_category_group.categories = []
-            
-            mock_response = Mock()
-            mock_response.data.category_groups = [mock_category_group]
-            
-            mock_categories_api = Mock()
-            mock_categories_api.get_categories.return_value = mock_response
-            
-            with patch('ynab.CategoriesApi', return_value=mock_categories_api):
-                async with Client(server.mcp) as client:
-                    result = await client.call_tool("list_category_groups", {})
-                    
-                    # When all groups are deleted, result should be empty
-                    assert len(result) == 0
 
-    @pytest.mark.asyncio
-    async def test_get_budget_month_with_deleted_categories(self, mock_env_vars):
-        """Test budget month filters out deleted categories."""
-        with patch('server.get_ynab_client') as mock_get_client:
-            mock_client = MagicMock()
-            mock_client.__enter__.return_value = mock_client
-            mock_client.__exit__.return_value = None
-            mock_get_client.return_value = mock_client
-            
-            # Create mock deleted category
-            mock_deleted_category = Mock()
-            mock_deleted_category.id = "cat-deleted"
-            mock_deleted_category.name = "Deleted"
-            mock_deleted_category.category_group_id = "group-1"
-            mock_deleted_category.hidden = False
-            mock_deleted_category.deleted = True  # Should be excluded
-            mock_deleted_category.note = "Deleted"
-            mock_deleted_category.budgeted = 0
-            mock_deleted_category.activity = 0
-            mock_deleted_category.balance = 0
-            mock_deleted_category.goal_type = None
-            mock_deleted_category.goal_target = None
-            mock_deleted_category.goal_percentage_complete = None
-            mock_deleted_category.goal_under_funded = None
-            
-            # Create mock month
-            mock_month = Mock()
-            mock_month.month = date(2024, 1, 1)  # YNAB returns date, not datetime
-            mock_month.note = "January budget"
-            mock_month.income = 400000
-            mock_month.budgeted = 350000
-            mock_month.activity = -200000
-            mock_month.to_be_budgeted = 50000
-            mock_month.age_of_money = 15
-            mock_month.categories = [mock_deleted_category]
-            
-            mock_response = Mock()
-            mock_response.data.month = mock_month
-            
-            mock_months_api = Mock()
-            mock_months_api.get_budget_month.return_value = mock_response
-            
-            with patch('ynab.MonthsApi', return_value=mock_months_api):
-                async with Client(server.mcp) as client:
-                    result = await client.call_tool("get_budget_month", {})
-                    
-                    assert len(result) == 1
-                    response_data = json.loads(result[0].text)
-                    # Should exclude deleted category
-                    assert len(response_data['categories']) == 0
 
     @pytest.mark.asyncio  
     async def test_get_budget_month_with_default_budget(self, mock_env_vars):
@@ -786,56 +713,6 @@ class TestMCPTools:
                     assert response_data['note'] is None
                     assert len(response_data['categories']) == 0
 
-    @pytest.mark.asyncio
-    async def test_get_budget_month_with_hidden_categories(self, mock_env_vars):
-        """Test budget month filters out hidden categories by default."""
-        with patch('server.get_ynab_client') as mock_get_client:
-            mock_client = MagicMock()
-            mock_client.__enter__.return_value = mock_client
-            mock_client.__exit__.return_value = None
-            mock_get_client.return_value = mock_client
-            
-            # Create mock hidden category
-            mock_hidden_category = Mock()
-            mock_hidden_category.id = "cat-hidden"
-            mock_hidden_category.name = "Hidden"
-            mock_hidden_category.category_group_id = "group-1"
-            mock_hidden_category.hidden = True  # Should be excluded by default
-            mock_hidden_category.deleted = False
-            mock_hidden_category.note = "Hidden"
-            mock_hidden_category.budgeted = 10000
-            mock_hidden_category.activity = 0
-            mock_hidden_category.balance = 10000
-            mock_hidden_category.goal_type = None
-            mock_hidden_category.goal_target = None
-            mock_hidden_category.goal_percentage_complete = None
-            mock_hidden_category.goal_under_funded = None
-            
-            # Create mock month
-            mock_month = Mock()
-            mock_month.month = date(2024, 1, 1)  # YNAB returns date, not datetime
-            mock_month.note = "January budget"
-            mock_month.income = 400000
-            mock_month.budgeted = 350000
-            mock_month.activity = -200000
-            mock_month.to_be_budgeted = 50000
-            mock_month.age_of_money = 15
-            mock_month.categories = [mock_hidden_category]
-            
-            mock_response = Mock()
-            mock_response.data.month = mock_month
-            
-            mock_months_api = Mock()
-            mock_months_api.get_budget_month.return_value = mock_response
-            
-            with patch('ynab.MonthsApi', return_value=mock_months_api):
-                async with Client(server.mcp) as client:
-                    result = await client.call_tool("get_budget_month", {})
-                    
-                    assert len(result) == 1
-                    response_data = json.loads(result[0].text)
-                    # Should exclude hidden category
-                    assert len(response_data['categories']) == 0
 
 
 class TestDataTypeHandling:
@@ -1362,4 +1239,1352 @@ class TestDataTypeHandling:
                     assert response_data['name'] == "Date Test Category"
                     # The YNAB API receives the date as passed
                     mock_months_api.get_month_category_by_id.assert_called_with("budget-456", test_date, "cat-456")
+
+    @pytest.mark.asyncio
+    async def test_list_transactions_basic(self, mock_env_vars):
+        """Test basic transaction listing without filters."""
+        import ynab
+        
+        with patch('server.get_ynab_client') as mock_get_client:
+            mock_client = MagicMock()
+            mock_client.__enter__.return_value = mock_client
+            mock_client.__exit__.return_value = None
+            mock_get_client.return_value = mock_client
+            
+            # Create transactions using real YNAB models
+            txn1 = ynab.TransactionDetail(
+                id="txn-1",
+                var_date=date(2024, 1, 15),
+                amount=-50000,  # -$50.00 outflow
+                memo="Grocery shopping",
+                cleared="cleared",
+                approved=True,
+                flag_color="red",
+                account_id="acc-1",
+                account_name="Checking",
+                payee_id="payee-1",
+                payee_name="Whole Foods",
+                category_id="cat-1",
+                category_name="Groceries",
+                transfer_account_id=None,
+                transfer_transaction_id=None,
+                matched_transaction_id=None,
+                import_id=None,
+                import_payee_name=None,
+                import_payee_name_original=None,
+                debt_transaction_type=None,
+                deleted=False,
+                subtransactions=[]
+            )
+            
+            txn2 = ynab.TransactionDetail(
+                id="txn-2",
+                var_date=date(2024, 1, 20),
+                amount=-75000,  # -$75.00 outflow
+                memo="Dinner",
+                cleared="uncleared",
+                approved=True,
+                flag_color=None,
+                account_id="acc-1",
+                account_name="Checking",
+                payee_id="payee-2",
+                payee_name="Restaurant XYZ",
+                category_id="cat-2",
+                category_name="Dining Out",
+                transfer_account_id=None,
+                transfer_transaction_id=None,
+                matched_transaction_id=None,
+                import_id=None,
+                import_payee_name=None,
+                import_payee_name_original=None,
+                debt_transaction_type=None,
+                deleted=False,
+                subtransactions=[]
+            )
+            
+            # Add a deleted transaction that should be filtered out
+            txn_deleted = ynab.TransactionDetail(
+                id="txn-deleted",
+                var_date=date(2024, 1, 10),
+                amount=-25000,
+                memo="Deleted transaction",
+                cleared="cleared",
+                approved=True,
+                flag_color=None,
+                account_id="acc-1",
+                account_name="Checking",
+                payee_id="payee-3",
+                payee_name="Store ABC",
+                category_id="cat-1",
+                category_name="Groceries",
+                transfer_account_id=None,
+                transfer_transaction_id=None,
+                matched_transaction_id=None,
+                import_id=None,
+                import_payee_name=None,
+                import_payee_name_original=None,
+                debt_transaction_type=None,
+                deleted=True,  # Should be excluded
+                subtransactions=[]
+            )
+            
+            transactions_response = ynab.TransactionsResponse(
+                data=ynab.TransactionsResponseData(
+                    transactions=[txn2, txn1, txn_deleted],  # Out of order to test sorting
+                    server_knowledge=0
+                )
+            )
+            
+            mock_transactions_api = Mock()
+            mock_transactions_api.get_transactions.return_value = transactions_response
+            
+            with patch('ynab.TransactionsApi', return_value=mock_transactions_api):
+                async with Client(server.mcp) as client:
+                    result = await client.call_tool("list_transactions", {})
+                    
+                    assert len(result) == 1
+                    response_data = json.loads(result[0].text)
+                    
+                    # Should have 2 transactions (deleted one excluded)
+                    assert len(response_data['transactions']) == 2
+                    
+                    # Should be sorted by date descending
+                    assert response_data['transactions'][0]['id'] == "txn-2"
+                    assert response_data['transactions'][0]['date'] == "2024-01-20"
+                    assert response_data['transactions'][0]['amount'] == "-75"
+                    assert response_data['transactions'][0]['payee_name'] == "Restaurant XYZ"
+                    assert response_data['transactions'][0]['category_name'] == "Dining Out"
+                    
+                    assert response_data['transactions'][1]['id'] == "txn-1"
+                    assert response_data['transactions'][1]['date'] == "2024-01-15"
+                    assert response_data['transactions'][1]['amount'] == "-50"
+                    assert response_data['transactions'][1]['flag_color'] == "red"
+                    
+                    # Check pagination
+                    assert response_data['pagination']['total_count'] == 2
+                    assert response_data['pagination']['has_more'] == False
+                    assert response_data['pagination']['returned_count'] == 2
+
+    @pytest.mark.asyncio
+    async def test_list_transactions_with_account_filter(self, mock_env_vars):
+        """Test transaction listing filtered by account."""
+        import ynab
+        
+        with patch('server.get_ynab_client') as mock_get_client:
+            mock_client = MagicMock()
+            mock_client.__enter__.return_value = mock_client
+            mock_client.__exit__.return_value = None
+            mock_get_client.return_value = mock_client
+            
+            # Create transaction
+            txn = ynab.TransactionDetail(
+                id="txn-acc-1",
+                var_date=date(2024, 2, 1),
+                amount=-30000,
+                memo="Account filtered",
+                cleared="cleared",
+                approved=True,
+                flag_color=None,
+                account_id="acc-checking",
+                account_name="Main Checking",
+                payee_id="payee-1",
+                payee_name="Store",
+                category_id="cat-1",
+                category_name="Shopping",
+                transfer_account_id=None,
+                transfer_transaction_id=None,
+                matched_transaction_id=None,
+                import_id=None,
+                import_payee_name=None,
+                import_payee_name_original=None,
+                debt_transaction_type=None,
+                deleted=False,
+                subtransactions=[]
+            )
+            
+            transactions_response = ynab.TransactionsResponse(
+                data=ynab.TransactionsResponseData(
+                    transactions=[txn],
+                    server_knowledge=0
+                )
+            )
+            
+            mock_transactions_api = Mock()
+            mock_transactions_api.get_transactions_by_account.return_value = transactions_response
+            
+            with patch('ynab.TransactionsApi', return_value=mock_transactions_api):
+                async with Client(server.mcp) as client:
+                    result = await client.call_tool("list_transactions", {
+                        "account_id": "acc-checking"
+                    })
+                    
+                    assert len(result) == 1
+                    response_data = json.loads(result[0].text)
+                    assert len(response_data['transactions']) == 1
+                    assert response_data['transactions'][0]['account_id'] == "acc-checking"
+                    
+                    # Verify correct API method was called
+                    mock_transactions_api.get_transactions_by_account.assert_called_once()
+                    args = mock_transactions_api.get_transactions_by_account.call_args[0]
+                    assert args[1] == "acc-checking"  # account_id parameter
+
+    @pytest.mark.asyncio
+    async def test_list_transactions_with_amount_filters(self, mock_env_vars):
+        """Test transaction listing with amount range filters."""
+        import ynab
+        
+        with patch('server.get_ynab_client') as mock_get_client:
+            mock_client = MagicMock()
+            mock_client.__enter__.return_value = mock_client
+            mock_client.__exit__.return_value = None
+            mock_get_client.return_value = mock_client
+            
+            # Create transactions with different amounts
+            txn_small = ynab.TransactionDetail(
+                id="txn-small",
+                var_date=date(2024, 3, 1),
+                amount=-25000,  # -$25
+                memo="Small purchase",
+                cleared="cleared",
+                approved=True,
+                flag_color=None,
+                account_id="acc-1",
+                account_name="Checking",
+                payee_id="payee-1",
+                payee_name="Coffee Shop",
+                category_id="cat-1",
+                category_name="Dining Out",
+                transfer_account_id=None,
+                transfer_transaction_id=None,
+                matched_transaction_id=None,
+                import_id=None,
+                import_payee_name=None,
+                import_payee_name_original=None,
+                debt_transaction_type=None,
+                deleted=False,
+                subtransactions=[]
+            )
+            
+            txn_medium = ynab.TransactionDetail(
+                id="txn-medium",
+                var_date=date(2024, 3, 2),
+                amount=-60000,  # -$60
+                memo="Medium purchase",
+                cleared="cleared",
+                approved=True,
+                flag_color=None,
+                account_id="acc-1",
+                account_name="Checking",
+                payee_id="payee-2",
+                payee_name="Restaurant",
+                category_id="cat-1",
+                category_name="Dining Out",
+                transfer_account_id=None,
+                transfer_transaction_id=None,
+                matched_transaction_id=None,
+                import_id=None,
+                import_payee_name=None,
+                import_payee_name_original=None,
+                debt_transaction_type=None,
+                deleted=False,
+                subtransactions=[]
+            )
+            
+            txn_large = ynab.TransactionDetail(
+                id="txn-large",
+                var_date=date(2024, 3, 3),
+                amount=-120000,  # -$120
+                memo="Large purchase",
+                cleared="cleared",
+                approved=True,
+                flag_color=None,
+                account_id="acc-1",
+                account_name="Checking",
+                payee_id="payee-3",
+                payee_name="Electronics Store",
+                category_id="cat-2",
+                category_name="Shopping",
+                transfer_account_id=None,
+                transfer_transaction_id=None,
+                matched_transaction_id=None,
+                import_id=None,
+                import_payee_name=None,
+                import_payee_name_original=None,
+                debt_transaction_type=None,
+                deleted=False,
+                subtransactions=[]
+            )
+            
+            transactions_response = ynab.TransactionsResponse(
+                data=ynab.TransactionsResponseData(
+                    transactions=[txn_small, txn_medium, txn_large],
+                    server_knowledge=0
+                )
+            )
+            
+            mock_transactions_api = Mock()
+            mock_transactions_api.get_transactions.return_value = transactions_response
+            
+            with patch('ynab.TransactionsApi', return_value=mock_transactions_api):
+                async with Client(server.mcp) as client:
+                    # Test with min_amount filter (transactions >= -$50)
+                    result = await client.call_tool("list_transactions", {
+                        "min_amount": -50.0  # -$50
+                    })
+                    
+                    response_data = json.loads(result[0].text)
+                    # Should only include small transaction (-$25 > -$50)
+                    assert len(response_data['transactions']) == 1
+                    assert response_data['transactions'][0]['id'] == "txn-small"
+                    
+                    # Test with max_amount filter (transactions <= -$100)
+                    result = await client.call_tool("list_transactions", {
+                        "max_amount": -100.0  # -$100
+                    })
+                    
+                    response_data = json.loads(result[0].text)
+                    # Should only include large transaction (-$120 < -$100)
+                    assert len(response_data['transactions']) == 1
+                    assert response_data['transactions'][0]['id'] == "txn-large"
+                    
+                    # Test with both min and max filters
+                    result = await client.call_tool("list_transactions", {
+                        "min_amount": -80.0,  # >= -$80
+                        "max_amount": -40.0   # <= -$40
+                    })
+                    
+                    response_data = json.loads(result[0].text)
+                    # Should only include medium transaction (-$60)
+                    assert len(response_data['transactions']) == 1
+                    assert response_data['transactions'][0]['id'] == "txn-medium"
+
+    @pytest.mark.asyncio
+    async def test_list_transactions_with_subtransactions(self, mock_env_vars):
+        """Test transaction listing with split transactions (subtransactions)."""
+        import ynab
+        
+        with patch('server.get_ynab_client') as mock_get_client:
+            mock_client = MagicMock()
+            mock_client.__enter__.return_value = mock_client
+            mock_client.__exit__.return_value = None
+            mock_get_client.return_value = mock_client
+            
+            # Create subtransactions
+            sub1 = ynab.SubTransaction(
+                id="sub-1",
+                transaction_id="txn-split",
+                amount=-30000,  # -$30
+                memo="Groceries portion",
+                payee_id=None,
+                payee_name=None,
+                category_id="cat-groceries",
+                category_name="Groceries",
+                transfer_account_id=None,
+                transfer_transaction_id=None,
+                deleted=False
+            )
+            
+            sub2 = ynab.SubTransaction(
+                id="sub-2",
+                transaction_id="txn-split",
+                amount=-20000,  # -$20
+                memo="Household items",
+                payee_id=None,
+                payee_name=None,
+                category_id="cat-household",
+                category_name="Household",
+                transfer_account_id=None,
+                transfer_transaction_id=None,
+                deleted=False
+            )
+            
+            # Deleted subtransaction should be filtered out
+            sub_deleted = ynab.SubTransaction(
+                id="sub-deleted",
+                transaction_id="txn-split",
+                amount=-10000,
+                memo="Deleted sub",
+                payee_id=None,
+                payee_name=None,
+                category_id="cat-other",
+                category_name="Other",
+                transfer_account_id=None,
+                transfer_transaction_id=None,
+                deleted=True
+            )
+            
+            # Create split transaction
+            txn_split = ynab.TransactionDetail(
+                id="txn-split",
+                var_date=date(2024, 4, 1),
+                amount=-50000,  # -$50 total
+                memo="Split transaction at Target",
+                cleared="cleared",
+                approved=True,
+                flag_color=None,
+                account_id="acc-1",
+                account_name="Checking",
+                payee_id="payee-target",
+                payee_name="Target",
+                category_id=None,  # Split transactions don't have a single category
+                category_name=None,
+                transfer_account_id=None,
+                transfer_transaction_id=None,
+                matched_transaction_id=None,
+                import_id=None,
+                import_payee_name=None,
+                import_payee_name_original=None,
+                debt_transaction_type=None,
+                deleted=False,
+                subtransactions=[sub1, sub2, sub_deleted]
+            )
+            
+            transactions_response = ynab.TransactionsResponse(
+                data=ynab.TransactionsResponseData(
+                    transactions=[txn_split],
+                    server_knowledge=0
+                )
+            )
+            
+            mock_transactions_api = Mock()
+            mock_transactions_api.get_transactions.return_value = transactions_response
+            
+            with patch('ynab.TransactionsApi', return_value=mock_transactions_api):
+                async with Client(server.mcp) as client:
+                    result = await client.call_tool("list_transactions", {})
+                    
+                    response_data = json.loads(result[0].text)
+                    assert len(response_data['transactions']) == 1
+                    
+                    txn = response_data['transactions'][0]
+                    assert txn['id'] == "txn-split"
+                    assert txn['amount'] == "-50"
+                    
+                    # Should have 2 subtransactions (deleted one excluded)
+                    assert len(txn['subtransactions']) == 2
+                    assert txn['subtransactions'][0]['id'] == "sub-1"
+                    assert txn['subtransactions'][0]['amount'] == "-30"
+                    assert txn['subtransactions'][0]['category_name'] == "Groceries"
+                    assert txn['subtransactions'][1]['id'] == "sub-2"
+                    assert txn['subtransactions'][1]['amount'] == "-20"
+                    assert txn['subtransactions'][1]['category_name'] == "Household"
+
+    @pytest.mark.asyncio
+    async def test_list_transactions_pagination(self, mock_env_vars):
+        """Test transaction listing with pagination."""
+        import ynab
+        
+        with patch('server.get_ynab_client') as mock_get_client:
+            mock_client = MagicMock()
+            mock_client.__enter__.return_value = mock_client
+            mock_client.__exit__.return_value = None
+            mock_get_client.return_value = mock_client
+            
+            # Create many transactions to test pagination
+            transactions = []
+            for i in range(5):
+                txn = ynab.TransactionDetail(
+                    id=f"txn-{i}",
+                    var_date=date(2024, 1, i + 1),
+                    amount=-10000 * (i + 1),
+                    memo=f"Transaction {i}",
+                    cleared="cleared",
+                    approved=True,
+                    flag_color=None,
+                    account_id="acc-1",
+                    account_name="Checking",
+                    payee_id=f"payee-{i}",
+                    payee_name=f"Store {i}",
+                    category_id="cat-1",
+                    category_name="Shopping",
+                    transfer_account_id=None,
+                    transfer_transaction_id=None,
+                    matched_transaction_id=None,
+                    import_id=None,
+                    import_payee_name=None,
+                    import_payee_name_original=None,
+                    debt_transaction_type=None,
+                    deleted=False,
+                    subtransactions=[]
+                )
+                transactions.append(txn)
+            
+            transactions_response = ynab.TransactionsResponse(
+                data=ynab.TransactionsResponseData(
+                    transactions=transactions,
+                    server_knowledge=0
+                )
+            )
+            
+            mock_transactions_api = Mock()
+            mock_transactions_api.get_transactions.return_value = transactions_response
+            
+            with patch('ynab.TransactionsApi', return_value=mock_transactions_api):
+                async with Client(server.mcp) as client:
+                    # Test first page
+                    result = await client.call_tool("list_transactions", {
+                        "limit": 2,
+                        "offset": 0
+                    })
+                    
+                    response_data = json.loads(result[0].text)
+                    assert len(response_data['transactions']) == 2
+                    assert response_data['pagination']['total_count'] == 5
+                    assert response_data['pagination']['has_more'] == True
+                    assert response_data['pagination']['next_offset'] == 2
+                    assert response_data['pagination']['returned_count'] == 2
+                    
+                    # Transactions should be sorted by date descending
+                    assert response_data['transactions'][0]['id'] == "txn-4"
+                    assert response_data['transactions'][1]['id'] == "txn-3"
+                    
+                    # Test second page
+                    result = await client.call_tool("list_transactions", {
+                        "limit": 2,
+                        "offset": 2
+                    })
+                    
+                    response_data = json.loads(result[0].text)
+                    assert len(response_data['transactions']) == 2
+                    assert response_data['transactions'][0]['id'] == "txn-2"
+                    assert response_data['transactions'][1]['id'] == "txn-1"
+
+    @pytest.mark.asyncio
+    async def test_list_transactions_with_category_filter(self, mock_env_vars):
+        """Test transaction listing filtered by category."""
+        import ynab
+        
+        with patch('server.get_ynab_client') as mock_get_client:
+            mock_client = MagicMock()
+            mock_client.__enter__.return_value = mock_client
+            mock_client.__exit__.return_value = None
+            mock_get_client.return_value = mock_client
+            
+            # Create transaction
+            txn = ynab.TransactionDetail(
+                id="txn-cat-1",
+                var_date=date(2024, 2, 1),
+                amount=-40000,
+                memo="Category filtered",
+                cleared="cleared",
+                approved=True,
+                flag_color=None,
+                account_id="acc-1",
+                account_name="Checking",
+                payee_id="payee-1",
+                payee_name="Store",
+                category_id="cat-dining",
+                category_name="Dining Out",
+                transfer_account_id=None,
+                transfer_transaction_id=None,
+                matched_transaction_id=None,
+                import_id=None,
+                import_payee_name=None,
+                import_payee_name_original=None,
+                debt_transaction_type=None,
+                deleted=False,
+                subtransactions=[]
+            )
+            
+            transactions_response = ynab.TransactionsResponse(
+                data=ynab.TransactionsResponseData(
+                    transactions=[txn],
+                    server_knowledge=0
+                )
+            )
+            
+            mock_transactions_api = Mock()
+            mock_transactions_api.get_transactions_by_category.return_value = transactions_response
+            
+            with patch('ynab.TransactionsApi', return_value=mock_transactions_api):
+                async with Client(server.mcp) as client:
+                    result = await client.call_tool("list_transactions", {
+                        "category_id": "cat-dining"
+                    })
+                    
+                    assert len(result) == 1
+                    response_data = json.loads(result[0].text)
+                    assert len(response_data['transactions']) == 1
+                    assert response_data['transactions'][0]['category_id'] == "cat-dining"
+                    
+                    # Verify correct API method was called
+                    mock_transactions_api.get_transactions_by_category.assert_called_once()
+                    args = mock_transactions_api.get_transactions_by_category.call_args[0]
+                    assert args[1] == "cat-dining"  # category_id parameter
+
+    @pytest.mark.asyncio
+    async def test_list_transactions_with_payee_filter(self, mock_env_vars):
+        """Test transaction listing filtered by payee."""
+        import ynab
+        
+        with patch('server.get_ynab_client') as mock_get_client:
+            mock_client = MagicMock()
+            mock_client.__enter__.return_value = mock_client
+            mock_client.__exit__.return_value = None
+            mock_get_client.return_value = mock_client
+            
+            # Create transaction
+            txn = ynab.TransactionDetail(
+                id="txn-payee-1",
+                var_date=date(2024, 3, 1),
+                amount=-80000,
+                memo="Payee filtered",
+                cleared="cleared",
+                approved=True,
+                flag_color=None,
+                account_id="acc-1",
+                account_name="Checking",
+                payee_id="payee-amazon",
+                payee_name="Amazon",
+                category_id="cat-shopping",
+                category_name="Shopping",
+                transfer_account_id=None,
+                transfer_transaction_id=None,
+                matched_transaction_id=None,
+                import_id=None,
+                import_payee_name=None,
+                import_payee_name_original=None,
+                debt_transaction_type=None,
+                deleted=False,
+                subtransactions=[]
+            )
+            
+            transactions_response = ynab.TransactionsResponse(
+                data=ynab.TransactionsResponseData(
+                    transactions=[txn],
+                    server_knowledge=0
+                )
+            )
+            
+            mock_transactions_api = Mock()
+            mock_transactions_api.get_transactions_by_payee.return_value = transactions_response
+            
+            with patch('ynab.TransactionsApi', return_value=mock_transactions_api):
+                async with Client(server.mcp) as client:
+                    result = await client.call_tool("list_transactions", {
+                        "payee_id": "payee-amazon"
+                    })
+                    
+                    assert len(result) == 1
+                    response_data = json.loads(result[0].text)
+                    assert len(response_data['transactions']) == 1
+                    assert response_data['transactions'][0]['payee_id'] == "payee-amazon"
+                    
+                    # Verify correct API method was called
+                    mock_transactions_api.get_transactions_by_payee.assert_called_once()
+                    args = mock_transactions_api.get_transactions_by_payee.call_args[0]
+                    assert args[1] == "payee-amazon"  # payee_id parameter
+
+    @pytest.mark.asyncio
+    async def test_list_payees_success(self, mock_env_vars):
+        """Test successful payee listing using real YNAB models."""
+        import ynab
+        
+        with patch('server.get_ynab_client') as mock_get_client:
+            mock_client = MagicMock()
+            mock_client.__enter__.return_value = mock_client
+            mock_client.__exit__.return_value = None
+            mock_get_client.return_value = mock_client
+            
+            # Create payees using real YNAB models
+            payee1 = ynab.Payee(
+                id="payee-1",
+                name="Amazon",
+                transfer_account_id=None,
+                deleted=False
+            )
+            
+            payee2 = ynab.Payee(
+                id="payee-2", 
+                name="Whole Foods",
+                transfer_account_id=None,
+                deleted=False
+            )
+            
+            # Deleted payee should be excluded by default
+            payee_deleted = ynab.Payee(
+                id="payee-deleted",
+                name="Closed Store",
+                transfer_account_id=None,
+                deleted=True
+            )
+            
+            # Transfer payee
+            payee_transfer = ynab.Payee(
+                id="payee-transfer",
+                name="Transfer : Savings",
+                transfer_account_id="acc-savings",
+                deleted=False
+            )
+            
+            payees_response = ynab.PayeesResponse(
+                data=ynab.PayeesResponseData(
+                    payees=[payee2, payee1, payee_deleted, payee_transfer],  # Not sorted
+                    server_knowledge=1000
+                )
+            )
+            
+            mock_payees_api = Mock()
+            mock_payees_api.get_payees.return_value = payees_response
+            
+            with patch('ynab.PayeesApi', return_value=mock_payees_api):
+                async with Client(server.mcp) as client:
+                    result = await client.call_tool("list_payees", {})
+                    
+                    assert len(result) == 1
+                    response_data = json.loads(result[0].text)
+                    
+                    # Should have 3 payees (deleted one excluded)
+                    assert len(response_data['payees']) == 3
+                    
+                    # Should be sorted by name
+                    assert response_data['payees'][0]['name'] == "Amazon"
+                    assert response_data['payees'][1]['name'] == "Transfer : Savings"
+                    assert response_data['payees'][2]['name'] == "Whole Foods"
+                    
+                    # Check transfer payee details
+                    transfer_payee = response_data['payees'][1]
+                    assert transfer_payee['id'] == "payee-transfer"
+                    assert transfer_payee['transfer_account_id'] == "acc-savings"
+                    
+                    # Check pagination
+                    assert response_data['pagination']['total_count'] == 3
+                    assert response_data['pagination']['has_more'] == False
+
+
+    @pytest.mark.asyncio
+    async def test_list_payees_pagination(self, mock_env_vars):
+        """Test payee listing with pagination."""
+        import ynab
+        
+        with patch('server.get_ynab_client') as mock_get_client:
+            mock_client = MagicMock()
+            mock_client.__enter__.return_value = mock_client
+            mock_client.__exit__.return_value = None
+            mock_get_client.return_value = mock_client
+            
+            # Create multiple payees
+            payees = []
+            for i in range(5):
+                payee = ynab.Payee(
+                    id=f"payee-{i}",
+                    name=f"Store {i:02d}",  # Store 00, Store 01, etc. for predictable sorting
+                    transfer_account_id=None,
+                    deleted=False
+                )
+                payees.append(payee)
+            
+            payees_response = ynab.PayeesResponse(
+                data=ynab.PayeesResponseData(
+                    payees=payees,
+                    server_knowledge=1000
+                )
+            )
+            
+            mock_payees_api = Mock()
+            mock_payees_api.get_payees.return_value = payees_response
+            
+            with patch('ynab.PayeesApi', return_value=mock_payees_api):
+                async with Client(server.mcp) as client:
+                    # Test first page
+                    result = await client.call_tool("list_payees", {
+                        "limit": 2,
+                        "offset": 0
+                    })
+                    
+                    response_data = json.loads(result[0].text)
+                    assert len(response_data['payees']) == 2
+                    assert response_data['pagination']['total_count'] == 5
+                    assert response_data['pagination']['has_more'] == True
+                    assert response_data['pagination']['next_offset'] == 2
+                    
+                    # Should be sorted alphabetically
+                    assert response_data['payees'][0]['name'] == "Store 00"
+                    assert response_data['payees'][1]['name'] == "Store 01"
+
+    @pytest.mark.asyncio
+    async def test_list_categories_filters_deleted_and_hidden(self, mock_env_vars):
+        """Test that list_categories automatically filters out deleted and hidden categories."""
+        with patch('server.get_ynab_client') as mock_get_client:
+            mock_client = MagicMock()
+            mock_client.__enter__.return_value = mock_client
+            mock_client.__exit__.return_value = None
+            mock_get_client.return_value = mock_client
+            
+            # Create mock category group with mix of categories
+            mock_category_group = Mock()
+            mock_category_group.name = "Monthly Bills"
+            
+            # Active category (should be included)
+            import ynab
+            mock_active_category = ynab.Category(
+                id="cat-active",
+                name="Active Category",
+                category_group_id="group-1",
+                hidden=False,
+                deleted=False,
+                note="Active",
+                budgeted=10000,
+                activity=-5000,
+                balance=5000,
+                goal_type=None,
+                goal_target=None,
+                goal_percentage_complete=None,
+                goal_under_funded=None,
+                goal_creation_month=None,
+                goal_target_month=None,
+                goal_overall_funded=None,
+                goal_overall_left=None
+            )
+            
+            # Hidden category (should be excluded)
+            mock_hidden_category = ynab.Category(
+                id="cat-hidden",
+                name="Hidden Category",
+                category_group_id="group-1",
+                hidden=True,
+                deleted=False,
+                note="Hidden",
+                budgeted=0,
+                activity=0,
+                balance=0,
+                goal_type=None,
+                goal_target=None,
+                goal_percentage_complete=None,
+                goal_under_funded=None,
+                goal_creation_month=None,
+                goal_target_month=None,
+                goal_overall_funded=None,
+                goal_overall_left=None
+            )
+            
+            # Deleted category (should be excluded)
+            mock_deleted_category = ynab.Category(
+                id="cat-deleted",
+                name="Deleted Category",
+                category_group_id="group-1",
+                hidden=False,
+                deleted=True,
+                note="Deleted",
+                budgeted=0,
+                activity=0,
+                balance=0,
+                goal_type=None,
+                goal_target=None,
+                goal_percentage_complete=None,
+                goal_under_funded=None,
+                goal_creation_month=None,
+                goal_target_month=None,
+                goal_overall_funded=None,
+                goal_overall_left=None
+            )
+            
+            mock_category_group.categories = [mock_active_category, mock_hidden_category, mock_deleted_category]
+            
+            mock_response = Mock()
+            mock_response.data.category_groups = [mock_category_group]
+            
+            mock_categories_api = Mock()
+            mock_categories_api.get_categories.return_value = mock_response
+            
+            with patch('ynab.CategoriesApi', return_value=mock_categories_api):
+                async with Client(server.mcp) as client:
+                    result = await client.call_tool("list_categories", {})
+                    
+                    assert len(result) == 1
+                    response_data = json.loads(result[0].text)
+                    # Should only include the active category
+                    assert len(response_data['categories']) == 1
+                    assert response_data['categories'][0]['id'] == "cat-active"
+                    assert response_data['categories'][0]['name'] == "Active Category"
+
+    @pytest.mark.asyncio
+    async def test_list_category_groups_filters_deleted(self, mock_env_vars):
+        """Test that list_category_groups automatically filters out deleted groups."""
+        with patch('server.get_ynab_client') as mock_get_client:
+            mock_client = MagicMock()
+            mock_client.__enter__.return_value = mock_client
+            mock_client.__exit__.return_value = None
+            mock_get_client.return_value = mock_client
+            
+            # Active group (should be included)
+            mock_active_group = Mock()
+            mock_active_group.id = "group-active"
+            mock_active_group.name = "Active Group"
+            mock_active_group.hidden = False
+            mock_active_group.deleted = False
+            mock_active_group.categories = []
+            
+            # Deleted group (should be excluded)
+            mock_deleted_group = Mock()
+            mock_deleted_group.id = "group-deleted"
+            mock_deleted_group.name = "Deleted Group"
+            mock_deleted_group.hidden = False
+            mock_deleted_group.deleted = True
+            mock_deleted_group.categories = []
+            
+            mock_response = Mock()
+            mock_response.data.category_groups = [mock_active_group, mock_deleted_group]
+            
+            mock_categories_api = Mock()
+            mock_categories_api.get_categories.return_value = mock_response
+            
+            with patch('ynab.CategoriesApi', return_value=mock_categories_api):
+                async with Client(server.mcp) as client:
+                    result = await client.call_tool("list_category_groups", {})
+                    
+                    assert len(result) == 1
+                    response_data = json.loads(result[0].text)
+                    # Should only include the active group (returns single group object when filtered to one)
+                    assert response_data['id'] == "group-active"
+                    assert response_data['name'] == "Active Group"
+
+    @pytest.mark.asyncio
+    async def test_get_budget_month_filters_deleted_and_hidden(self, mock_env_vars):
+        """Test that get_budget_month automatically filters out deleted and hidden categories."""
+        with patch('server.get_ynab_client') as mock_get_client:
+            mock_client = MagicMock()
+            mock_client.__enter__.return_value = mock_client
+            mock_client.__exit__.return_value = None
+            mock_get_client.return_value = mock_client
+            
+            # Active category (should be included)
+            import ynab
+            mock_active_category = ynab.Category(
+                id="cat-active",
+                name="Active Category",
+                category_group_id="group-1",
+                hidden=False,
+                deleted=False,
+                note="Active",
+                budgeted=10000,
+                activity=-5000,
+                balance=5000,
+                goal_type=None,
+                goal_target=None,
+                goal_percentage_complete=None,
+                goal_under_funded=None,
+                goal_creation_month=None,
+                goal_target_month=None,
+                goal_overall_funded=None,
+                goal_overall_left=None
+            )
+            
+            # Hidden category (should be excluded)
+            mock_hidden_category = ynab.Category(
+                id="cat-hidden",
+                name="Hidden Category",
+                category_group_id="group-1",
+                hidden=True,
+                deleted=False,
+                note="Hidden",
+                budgeted=0,
+                activity=0,
+                balance=0,
+                goal_type=None,
+                goal_target=None,
+                goal_percentage_complete=None,
+                goal_under_funded=None,
+                goal_creation_month=None,
+                goal_target_month=None,
+                goal_overall_funded=None,
+                goal_overall_left=None
+            )
+            
+            mock_month = Mock()
+            mock_month.month = date(2024, 1, 1)
+            mock_month.note = "January budget"
+            mock_month.income = 400000
+            mock_month.budgeted = 350000
+            mock_month.activity = -200000
+            mock_month.to_be_budgeted = 50000
+            mock_month.age_of_money = 15
+            # Deleted category (should be excluded)
+            mock_deleted_category = ynab.Category(
+                id="cat-deleted",
+                name="Deleted Category",
+                category_group_id="group-1",
+                hidden=False,
+                deleted=True,
+                note="Deleted",
+                budgeted=0,
+                activity=0,
+                balance=0,
+                goal_type=None,
+                goal_target=None,
+                goal_percentage_complete=None,
+                goal_under_funded=None,
+                goal_creation_month=None,
+                goal_target_month=None,
+                goal_overall_funded=None,
+                goal_overall_left=None
+            )
+            
+            mock_month.categories = [mock_active_category, mock_hidden_category, mock_deleted_category]
+            
+            mock_response = Mock()
+            mock_response.data.month = mock_month
+            
+            mock_months_api = Mock()
+            mock_months_api.get_budget_month.return_value = mock_response
+            
+            with patch('ynab.MonthsApi', return_value=mock_months_api):
+                async with Client(server.mcp) as client:
+                    result = await client.call_tool("get_budget_month", {})
+                    
+                    assert len(result) == 1
+                    response_data = json.loads(result[0].text)
+                    # Should only include the active category
+                    assert len(response_data['categories']) == 1
+                    assert response_data['categories'][0]['id'] == "cat-active"
+                    assert response_data['categories'][0]['name'] == "Active Category"
+
+    @pytest.mark.asyncio
+    async def test_list_payees_filters_deleted(self, mock_env_vars):
+        """Test that list_payees automatically filters out deleted payees."""
+        import ynab
+        
+        with patch('server.get_ynab_client') as mock_get_client:
+            mock_client = MagicMock()
+            mock_client.__enter__.return_value = mock_client
+            mock_client.__exit__.return_value = None
+            mock_get_client.return_value = mock_client
+            
+            # Active payee (should be included)
+            payee_active = ynab.Payee(
+                id="payee-active",
+                name="Active Store",
+                transfer_account_id=None,
+                deleted=False
+            )
+            
+            # Deleted payee (should be excluded)
+            payee_deleted = ynab.Payee(
+                id="payee-deleted",
+                name="Deleted Store",
+                transfer_account_id=None,
+                deleted=True
+            )
+            
+            payees_response = ynab.PayeesResponse(
+                data=ynab.PayeesResponseData(
+                    payees=[payee_active, payee_deleted],
+                    server_knowledge=1000
+                )
+            )
+            
+            mock_payees_api = Mock()
+            mock_payees_api.get_payees.return_value = payees_response
+            
+            with patch('ynab.PayeesApi', return_value=mock_payees_api):
+                async with Client(server.mcp) as client:
+                    result = await client.call_tool("list_payees", {})
+                    
+                    response_data = json.loads(result[0].text)
+                    # Should only include the active payee
+                    assert len(response_data['payees']) == 1
+                    assert response_data['payees'][0]['name'] == "Active Store"
+                    assert response_data['payees'][0]['id'] == "payee-active"
+
+    @pytest.mark.asyncio
+    async def test_find_payee_filters_deleted(self, mock_env_vars):
+        """Test that find_payee automatically filters out deleted payees."""
+        import ynab
+        
+        with patch('server.get_ynab_client') as mock_get_client:
+            mock_client = MagicMock()
+            mock_client.__enter__.return_value = mock_client
+            mock_client.__exit__.return_value = None
+            mock_get_client.return_value = mock_client
+            
+            # Both payees have "amazon" in name, but one is deleted
+            payee_active = ynab.Payee(
+                id="payee-active",
+                name="Amazon",
+                transfer_account_id=None,
+                deleted=False
+            )
+            
+            payee_deleted = ynab.Payee(
+                id="payee-deleted",
+                name="Amazon Prime",
+                transfer_account_id=None,
+                deleted=True
+            )
+            
+            payees_response = ynab.PayeesResponse(
+                data=ynab.PayeesResponseData(
+                    payees=[payee_active, payee_deleted],
+                    server_knowledge=1000
+                )
+            )
+            
+            mock_payees_api = Mock()
+            mock_payees_api.get_payees.return_value = payees_response
+            
+            with patch('ynab.PayeesApi', return_value=mock_payees_api):
+                async with Client(server.mcp) as client:
+                    result = await client.call_tool("find_payee", {
+                        "name_search": "amazon"
+                    })
+                    
+                    response_data = json.loads(result[0].text)
+                    # Should only find the active Amazon payee, not the deleted one
+                    assert len(response_data['payees']) == 1
+                    assert response_data['payees'][0]['name'] == "Amazon"
+                    assert response_data['payees'][0]['id'] == "payee-active"
+
+    @pytest.mark.asyncio
+    async def test_find_payee_success(self, mock_env_vars):
+        """Test successful payee search by name."""
+        import ynab
+        
+        with patch('server.get_ynab_client') as mock_get_client:
+            mock_client = MagicMock()
+            mock_client.__enter__.return_value = mock_client
+            mock_client.__exit__.return_value = None
+            mock_get_client.return_value = mock_client
+            
+            # Create payees with different names for searching
+            payees = [
+                ynab.Payee(
+                    id="payee-amazon",
+                    name="Amazon",
+                    transfer_account_id=None,
+                    deleted=False
+                ),
+                ynab.Payee(
+                    id="payee-amazon-web",
+                    name="Amazon Web Services",
+                    transfer_account_id=None,
+                    deleted=False
+                ),
+                ynab.Payee(
+                    id="payee-starbucks",
+                    name="Starbucks",
+                    transfer_account_id=None,
+                    deleted=False
+                ),
+                ynab.Payee(
+                    id="payee-grocery",
+                    name="Whole Foods Market",
+                    transfer_account_id=None,
+                    deleted=False
+                ),
+                ynab.Payee(
+                    id="payee-deleted",
+                    name="Amazon Prime",
+                    transfer_account_id=None,
+                    deleted=True
+                )
+            ]
+            
+            payees_response = ynab.PayeesResponse(
+                data=ynab.PayeesResponseData(
+                    payees=payees,
+                    server_knowledge=1000
+                )
+            )
+            
+            mock_payees_api = Mock()
+            mock_payees_api.get_payees.return_value = payees_response
+            
+            with patch('ynab.PayeesApi', return_value=mock_payees_api):
+                async with Client(server.mcp) as client:
+                    # Test searching for "amazon" (case-insensitive)
+                    result = await client.call_tool("find_payee", {
+                        "name_search": "amazon"
+                    })
+                    
+                    response_data = json.loads(result[0].text)
+                    # Should find Amazon and Amazon Web Services, but not deleted Amazon Prime
+                    assert len(response_data['payees']) == 2
+                    assert response_data['pagination']['total_count'] == 2
+                    assert response_data['pagination']['has_more'] == False
+                    
+                    # Should be sorted alphabetically
+                    payee_names = [p['name'] for p in response_data['payees']]
+                    assert payee_names == ["Amazon", "Amazon Web Services"]
+
+    @pytest.mark.asyncio
+    async def test_find_payee_case_insensitive(self, mock_env_vars):
+        """Test that payee search is case-insensitive."""
+        import ynab
+        
+        with patch('server.get_ynab_client') as mock_get_client:
+            mock_client = MagicMock()
+            mock_client.__enter__.return_value = mock_client
+            mock_client.__exit__.return_value = None
+            mock_get_client.return_value = mock_client
+            
+            payees = [
+                ynab.Payee(
+                    id="payee-1",
+                    name="Starbucks Coffee",
+                    transfer_account_id=None,
+                    deleted=False
+                )
+            ]
+            
+            payees_response = ynab.PayeesResponse(
+                data=ynab.PayeesResponseData(
+                    payees=payees,
+                    server_knowledge=1000
+                )
+            )
+            
+            mock_payees_api = Mock()
+            mock_payees_api.get_payees.return_value = payees_response
+            
+            with patch('ynab.PayeesApi', return_value=mock_payees_api):
+                async with Client(server.mcp) as client:
+                    # Test various case combinations
+                    search_terms_matches = [
+                        ("STARBUCKS", 1),
+                        ("starbucks", 1),
+                        ("StArBuCkS", 1),
+                        ("coffee", 1),
+                        ("COFFEE", 1),
+                        ("nonexistent", 0)  # This will test the else branch
+                    ]
+                    
+                    for search_term, expected_count in search_terms_matches:
+                        result = await client.call_tool("find_payee", {
+                            "name_search": search_term
+                        })
+                        
+                        response_data = json.loads(result[0].text)
+                        assert len(response_data['payees']) == expected_count
+                        if expected_count > 0:
+                            assert response_data['payees'][0]['name'] == "Starbucks Coffee"
+
+
+    @pytest.mark.asyncio
+    async def test_find_payee_limit(self, mock_env_vars):
+        """Test payee search with limit parameter."""
+        import ynab
+        
+        with patch('server.get_ynab_client') as mock_get_client:
+            mock_client = MagicMock()
+            mock_client.__enter__.return_value = mock_client
+            mock_client.__exit__.return_value = None
+            mock_get_client.return_value = mock_client
+            
+            # Create multiple payees with "store" in the name
+            payees = []
+            for i in range(5):
+                payees.append(
+                    ynab.Payee(
+                        id=f"payee-{i}",
+                        name=f"Store {i:02d}",  # Store 00, Store 01, etc.
+                        transfer_account_id=None,
+                        deleted=False
+                    )
+                )
+            
+            payees_response = ynab.PayeesResponse(
+                data=ynab.PayeesResponseData(
+                    payees=payees,
+                    server_knowledge=1000
+                )
+            )
+            
+            mock_payees_api = Mock()
+            mock_payees_api.get_payees.return_value = payees_response
+            
+            with patch('ynab.PayeesApi', return_value=mock_payees_api):
+                async with Client(server.mcp) as client:
+                    # Test with limit of 2
+                    result = await client.call_tool("find_payee", {
+                        "name_search": "store",
+                        "limit": 2
+                    })
+                    
+                    response_data = json.loads(result[0].text)
+                    assert len(response_data['payees']) == 2
+                    assert response_data['pagination']['total_count'] == 5
+                    assert response_data['pagination']['has_more'] == True
+                    assert response_data['pagination']['returned_count'] == 2
+                    
+                    # Should be first 2 in alphabetical order
+                    assert response_data['payees'][0]['name'] == "Store 00"
+                    assert response_data['payees'][1]['name'] == "Store 01"
+
+    @pytest.mark.asyncio
+    async def test_find_payee_no_matches(self, mock_env_vars):
+        """Test payee search with no matching results."""
+        import ynab
+        
+        with patch('server.get_ynab_client') as mock_get_client:
+            mock_client = MagicMock()
+            mock_client.__enter__.return_value = mock_client
+            mock_client.__exit__.return_value = None
+            mock_get_client.return_value = mock_client
+            
+            payees = [
+                ynab.Payee(
+                    id="payee-1",
+                    name="Starbucks",
+                    transfer_account_id=None,
+                    deleted=False
+                )
+            ]
+            
+            payees_response = ynab.PayeesResponse(
+                data=ynab.PayeesResponseData(
+                    payees=payees,
+                    server_knowledge=1000
+                )
+            )
+            
+            mock_payees_api = Mock()
+            mock_payees_api.get_payees.return_value = payees_response
+            
+            with patch('ynab.PayeesApi', return_value=mock_payees_api):
+                async with Client(server.mcp) as client:
+                    result = await client.call_tool("find_payee", {
+                        "name_search": "nonexistent"
+                    })
+                    
+                    response_data = json.loads(result[0].text)
+                    assert len(response_data['payees']) == 0
+                    assert response_data['pagination']['total_count'] == 0
+                    assert response_data['pagination']['has_more'] == False
+                    assert response_data['pagination']['returned_count'] == 0
+
+    @pytest.mark.asyncio
+    async def test_find_payee_budget_id_or_default(self, mock_env_vars):
+        """Test find_payee uses budget_id_or_default helper."""
+        import ynab
+        
+        with patch('server.get_ynab_client') as mock_get_client:
+            mock_client = MagicMock()
+            mock_client.__enter__.return_value = mock_client
+            mock_client.__exit__.return_value = None
+            mock_get_client.return_value = mock_client
+            
+            payees_response = ynab.PayeesResponse(
+                data=ynab.PayeesResponseData(
+                    payees=[],
+                    server_knowledge=1000
+                )
+            )
+            
+            mock_payees_api = Mock()
+            mock_payees_api.get_payees.return_value = payees_response
+            
+            with patch('ynab.PayeesApi', return_value=mock_payees_api):
+                with patch('server.budget_id_or_default') as mock_budget_helper:
+                    mock_budget_helper.return_value = "default-budget-123"
+                    
+                    async with Client(server.mcp) as client:
+                        await client.call_tool("find_payee", {
+                            "name_search": "test"
+                        })
+                        
+                        # Should call the helper with None
+                        mock_budget_helper.assert_called_once_with(None)
+                        # Should call the API with the returned budget ID
+                        mock_payees_api.get_payees.assert_called_once_with("default-budget-123")
+
 
