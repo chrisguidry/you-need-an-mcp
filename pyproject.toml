@@ -4,11 +4,7 @@ version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
-dependencies = [
-    "fastmcp>=2.8.0",
-    "pydantic>=2.11.5",
-    "ynab>=1.4.0",
-]
+dependencies = ["fastmcp>=2.8.0", "pydantic>=2.11.5", "ynab>=1.4.0"]
 
 [dependency-groups]
 dev = [
@@ -16,36 +12,46 @@ dev = [
     "pytest-asyncio>=1.0.0",
     "pytest-cov>=6.2.1",
     "pytest-xdist>=3.7.0",
+    "mypy>=1.8.0",
+    "pre-commit>=3.6.0",
+    "ruff>=0.12.0",
 ]
 
 [tool.pytest.ini_options]
 addopts = [
     "--cov=server",
-    "--cov=models", 
-    "--cov=test_server",
+    "--cov=models",
+    "--cov=tests/",
     "--cov-branch",
     "--cov-report=term-missing",
-    "--cov-fail-under=100"
+    "--cov-fail-under=100",
+    "--strict-markers",
+    "--strict-config",
+    "-Werror",
 ]
 asyncio_mode = "auto"
-testpaths = [
-    "test_server.py"
-]
+testpaths = ["tests"]
+filterwarnings = ["error"]
 
-[tool.coverage.run]
-branch = true
-source = ["server", "models", "test_server"]
+[tool.mypy]
+python_version = "3.12"
+strict = true
 
-[tool.coverage.report]
-exclude_lines = [
-    "pragma: no cover",
-    "def __repr__",
-    "if self.debug:",
-    "if settings.DEBUG",
-    "raise AssertionError",
-    "raise NotImplementedError",
-    "if 0:",
-    "if __name__ == .__main__.:",
-    "class .*\\bProtocol\\):",
-    "@(abc\\.)?abstractmethod"
+[[tool.mypy.overrides]]
+module = ["ynab", "ynab.*"]
+implicit_reexport = true
+
+[tool.ruff]
+target-version = "py312"
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "B",   # flake8-bugbear
+    "UP",  # pyupgrade (enforce modern python syntax)
+    "RUF", # ruff-specific rules
 ]
+ignore = []

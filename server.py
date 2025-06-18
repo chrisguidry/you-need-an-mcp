@@ -1,17 +1,25 @@
 import os
-from decimal import Decimal
-from typing import Any, Dict, List, Literal
 from datetime import date, datetime
+from decimal import Decimal
+from typing import Any, Literal
 
 import ynab
 from fastmcp import FastMCP
 
 from models import (
-    Account, AccountsResponse, Budget, CurrencyFormat, PaginationInfo,
-    Transaction, TransactionsResponse, Subtransaction, Payee, PayeesResponse
+    Account,
+    AccountsResponse,
+    Budget,
+    CurrencyFormat,
+    PaginationInfo,
+    Payee,
+    PayeesResponse,
+    Subtransaction,
+    Transaction,
+    TransactionsResponse,
 )
 
-mcp = FastMCP(
+mcp: FastMCP[None] = FastMCP(
     name="YNAB",
     instructions="""
     Gives you access to a user's YNAB account, including budgets, accounts, and
@@ -24,7 +32,7 @@ mcp = FastMCP(
 )
 
 
-def get_ynab_client():
+def get_ynab_client() -> ynab.ApiClient:
     """Get authenticated YNAB client"""
     access_token = os.getenv("YNAB_ACCESS_TOKEN")
     if not access_token:
@@ -39,8 +47,6 @@ def milliunits_to_currency(milliunits: int, decimal_digits: int = 2) -> Decimal:
 
     YNAB uses milliunits where 1000 milliunits = 1 currency unit
     """
-    if milliunits is None:
-        return None
     return Decimal(milliunits) / Decimal("1000")
 
 
@@ -61,17 +67,18 @@ def budget_id_or_default(budget_id: str | None) -> str:
     return budget_id
 
 
-def convert_transaction_to_model(txn) -> Transaction:
+def convert_transaction_to_model(txn: Any) -> Transaction:
     """Convert YNAB transaction object to our Transaction model.
-    
-    Handles both TransactionDetail and HybridTransaction types that come from different endpoints.
+
+    Handles both TransactionDetail and HybridTransaction types that come from
+    different endpoints.
     """
     # Convert amount from milliunits
     amount = milliunits_to_currency(txn.amount)
-    
+
     # Handle subtransactions if present and available
     subtransactions = None
-    if hasattr(txn, 'subtransactions') and txn.subtransactions:
+    if hasattr(txn, "subtransactions") and txn.subtransactions:
         subtransactions = []
         for sub in txn.subtransactions:
             if not sub.deleted:
@@ -88,10 +95,10 @@ def convert_transaction_to_model(txn) -> Transaction:
                         transfer_account_id=sub.transfer_account_id,
                         transfer_transaction_id=sub.transfer_transaction_id,
                         deleted=sub.deleted,
-                        amount_milliunits=sub.amount
+                        amount_milliunits=sub.amount,
                     )
                 )
-                
+
     return Transaction(
         id=txn.id,
         date=txn.var_date,
@@ -101,11 +108,11 @@ def convert_transaction_to_model(txn) -> Transaction:
         approved=txn.approved,
         flag_color=txn.flag_color,
         account_id=txn.account_id,
-        account_name=getattr(txn, 'account_name', None),
+        account_name=getattr(txn, "account_name", None),
         payee_id=txn.payee_id,
-        payee_name=getattr(txn, 'payee_name', None),
+        payee_name=getattr(txn, "payee_name", None),
         category_id=txn.category_id,
-        category_name=getattr(txn, 'category_name', None),
+        category_name=getattr(txn, "category_name", None),
         transfer_account_id=txn.transfer_account_id,
         transfer_transaction_id=txn.transfer_transaction_id,
         matched_transaction_id=txn.matched_transaction_id,
@@ -115,34 +122,36 @@ def convert_transaction_to_model(txn) -> Transaction:
         debt_transaction_type=txn.debt_transaction_type,
         deleted=txn.deleted,
         amount_milliunits=txn.amount,
-        subtransactions=subtransactions
+        subtransactions=subtransactions,
     )
 
 
-def convert_month_to_date(month: date | Literal["current", "last", "next"]) -> date:
+def convert_month_to_date(
+    month: date | Literal["current", "last", "next"],
+) -> date:
     """Convert month parameter to appropriate date object for YNAB API.
-    
+
     Args:
         month: Month in ISO format (date object), or "current", "last", "next" literals
-        
+
     Returns:
         date object representing the first day of the specified month:
         - "current": first day of current month
         - "last": first day of previous month
-        - "next": first day of next month  
+        - "next": first day of next month
         - date object unchanged if already a date
     """
     if isinstance(month, date):
         return month
-        
+
     # Get current date for calculations
     today = datetime.now().date()
     current_year = today.year
     current_month = today.month
-    
+
     if month == "current":
         return date(current_year, current_month, 1)
-    
+
     elif month == "last":
         # Previous month
         if current_month == 1:
@@ -150,7 +159,7 @@ def convert_month_to_date(month: date | Literal["current", "last", "next"]) -> d
             return date(current_year - 1, 12, 1)
         else:
             return date(current_year, current_month - 1, 1)
-    
+
     elif month == "next":
         # Next month
         if current_month == 12:
@@ -158,13 +167,13 @@ def convert_month_to_date(month: date | Literal["current", "last", "next"]) -> d
             return date(current_year + 1, 1, 1)
         else:
             return date(current_year, current_month + 1, 1)
-    
+
     # This shouldn't happen with proper typing, but just in case
     raise ValueError(f"Invalid month value: {month}")
 
 
 @mcp.tool()
-def list_budgets() -> List[Budget]:
+def list_budgets() -> list[Budget]:
     """List all budgets from YNAB with metadata and currency formatting information."""
     with get_ynab_client() as api_client:
         budgets_api = ynab.BudgetsApi(api_client)
@@ -206,17 +215,19 @@ def list_accounts(
     budget_id: str | None = None,
 ) -> AccountsResponse:
     """List accounts for a specific budget with pagination.
-    
-    IMPORTANT: If the user is asking about their accounts in general (not a specific budget), 
-    you can omit the budget_id parameter entirely. Do NOT call list_budgets first - just 
-    call this tool without budget_id and it will use their default budget automatically.
-    
+
+    IMPORTANT: If the user is asking about their accounts in general (not a
+    specific budget), you can omit the budget_id parameter entirely. Do NOT call
+    list_budgets first - just call this tool without budget_id and it will use their
+    default budget automatically.
+
     Only returns open/active accounts. Closed accounts are excluded automatically.
 
     Args:
         limit: Maximum number of accounts to return (default 100)
         offset: Number of accounts to skip (default 0)
-        budget_id: Budget ID (optional - omit to use default budget automatically)
+        budget_id: Budget ID (optional - omit to use default budget
+        automatically)
 
     Returns:
         AccountsResponse with accounts list and pagination information
@@ -251,7 +262,9 @@ def list_accounts(
                     last_reconciled_at=account.last_reconciled_at,
                     debt_original_balance=milliunits_to_currency(
                         account.debt_original_balance
-                    ),
+                    )
+                    if account.debt_original_balance is not None
+                    else None,
                 )
             )
 
@@ -281,19 +294,22 @@ def list_categories(
     limit: int = 50,
     offset: int = 0,
     budget_id: str | None = None,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """List categories for a specific budget with pagination.
-    
-    IMPORTANT: If the user is asking about their categories in general (not a specific budget), 
-    you can omit the budget_id parameter entirely. Do NOT call list_budgets first - just 
-    call this tool without budget_id and it will use their default budget automatically.
-    
-    Only returns active/visible categories. Hidden and deleted categories are excluded automatically.
+
+    IMPORTANT: If the user is asking about their categories in general (not a specific
+    budget), you can omit the budget_id parameter entirely. Do NOT call list_budgets
+    first - just call this tool without budget_id and it will use their default budget
+    automatically.
+
+    Only returns active/visible categories. Hidden and deleted categories are excluded
+    automatically.
 
     Args:
         limit: Maximum number of categories to return (default 50)
         offset: Number of categories to skip (default 0)
-        budget_id: Budget ID (optional - omit to use default budget automatically)
+        budget_id: Budget ID (optional - omit to use default budget
+        automatically)
 
     Returns:
         Dict with 'categories', 'total_count', 'has_more', 'next_offset' fields
@@ -328,11 +344,15 @@ def list_categories(
                         "activity": milliunits_to_currency(category.activity),
                         "balance": milliunits_to_currency(category.balance),
                         "goal_type": category.goal_type,
-                        "goal_target": milliunits_to_currency(category.goal_target),
+                        "goal_target": milliunits_to_currency(category.goal_target)
+                        if category.goal_target is not None
+                        else None,
                         "goal_percentage_complete": category.goal_percentage_complete,
                         "goal_under_funded": milliunits_to_currency(
                             category.goal_under_funded
-                        ),
+                        )
+                        if category.goal_under_funded is not None
+                        else None,
                     }
                 )
 
@@ -359,15 +379,17 @@ def list_categories(
 
 
 @mcp.tool()
-def list_category_groups(budget_id: str | None = None) -> List[Dict[str, Any]]:
+def list_category_groups(budget_id: str | None = None) -> list[dict[str, Any]]:
     """List category groups for a specific budget (lighter weight than full categories).
-    
-    IMPORTANT: If the user is asking about their category groups in general (not a specific budget), 
-    you can omit the budget_id parameter entirely. Do NOT call list_budgets first - just 
-    call this tool without budget_id and it will use their default budget automatically.
+
+    IMPORTANT: If the user is asking about their category groups in general (not a
+    specific budget), you can omit the budget_id parameter entirely. Do NOT call
+    list_budgets first - just call this tool without budget_id and it will use their
+    default budget automatically.
 
     Args:
-        budget_id: Budget ID (optional - omit to use default budget automatically)
+        budget_id: Budget ID (optional - omit to use default budget
+        automatically)
     """
     budget_id = budget_id_or_default(budget_id)
 
@@ -424,24 +446,30 @@ def get_budget_month(
     limit: int = 50,
     offset: int = 0,
     budget_id: str | None = None,
-) -> Dict[str, Any]:
-    """Get budget data for a specific month including category budgets, activity, and balances with pagination.
-    
-    IMPORTANT: If the user is asking about their budget in general (not a specific budget), 
-    you can omit the budget_id parameter entirely. Do NOT call list_budgets first - just 
-    call this tool without budget_id and it will use their default budget automatically.
-    
-    Only returns active/visible categories. Hidden and deleted categories are excluded automatically.
+) -> dict[str, Any]:
+    """Get budget data for a specific month including category budgets, activity, and
+    balances with pagination.
+
+    IMPORTANT: If the user is asking about their budget in general (not a specific
+    budget), you can omit the budget_id parameter entirely. Do NOT call list_budgets
+    first - just call this tool without budget_id and it will use their default budget
+    automatically.
+
+    Only returns active/visible categories. Hidden and deleted categories are excluded
+    automatically.
 
     Args:
-        month: Month specifier. Use "current" for current month, "last" for previous month, 
-               "next" for next month, or a specific date object for an exact month (default "current")
+        month: Month specifier. Use "current" for current month, "last" for previous
+               month, "next" for next month, or a specific date object for an exact
+               month (default "current")
         limit: Maximum number of categories to return (default 50)
         offset: Number of categories to skip for pagination (default 0)
-        budget_id: Budget ID (optional - omit to use default budget automatically)
+        budget_id: Budget ID (optional - omit to use default budget
+        automatically)
 
     Returns:
-        Dict with month info, categories with budgeted/activity/balance data, and pagination info
+        Dict with month info, categories with budgeted/activity/balance data, and
+        pagination info
     """
     budget_id = budget_id_or_default(budget_id)
 
@@ -472,11 +500,15 @@ def get_budget_month(
                     "activity": milliunits_to_currency(category.activity),
                     "balance": milliunits_to_currency(category.balance),
                     "goal_type": category.goal_type,
-                    "goal_target": milliunits_to_currency(category.goal_target),
+                    "goal_target": milliunits_to_currency(category.goal_target)
+                    if category.goal_target is not None
+                    else None,
                     "goal_percentage_complete": category.goal_percentage_complete,
                     "goal_under_funded": milliunits_to_currency(
                         category.goal_under_funded
-                    ),
+                    )
+                    if category.goal_under_funded is not None
+                    else None,
                     "budgeted_milliunits": category.budgeted,
                     "activity_milliunits": category.activity,
                     "balance_milliunits": category.balance,
@@ -518,29 +550,34 @@ def get_budget_month(
 
 @mcp.tool()
 def get_month_category_by_id(
-    category_id: str, month: date | Literal["current", "last", "next"] = "current", budget_id: str | None = None
-) -> Dict[str, Any]:
+    category_id: str,
+    month: date | Literal["current", "last", "next"] = "current",
+    budget_id: str | None = None,
+) -> dict[str, Any]:
     """Get a specific category's data for a specific month.
-    
-    IMPORTANT: If the user is asking about a category in their general budget (not a specific budget), 
-    you can omit the budget_id parameter entirely. Do NOT call list_budgets first - just 
-    call this tool without budget_id and it will use their default budget automatically.
+
+    IMPORTANT: If the user is asking about a category in their general budget (not a
+    specific budget), you can omit the budget_id parameter entirely. Do NOT call
+    list_budgets first - just call this tool without budget_id and it will use their
+    default budget automatically.
 
     Args:
         category_id: Category ID (required)
-        month: Month specifier. Use "current" for current month, "last" for previous month, 
-               "next" for next month, or a specific date object for an exact month (default "current")
-        budget_id: Budget ID (optional - omit to use default budget automatically)
+        month: Month specifier. Use "current" for current month, "last" for previous
+               month, "next" for next month, or a specific date object for an exact
+               month (default "current")
+        budget_id: Budget ID (optional - omit to use default budget
+        automatically)
 
     Returns:
         Dict with category budget data for the specified month
     """
     budget_id = budget_id_or_default(budget_id)
-        
+
     with get_ynab_client() as api_client:
-        months_api = ynab.MonthsApi(api_client)
+        categories_api = ynab.CategoriesApi(api_client)
         converted_month = convert_month_to_date(month)
-        category_response = months_api.get_month_category_by_id(
+        category_response = categories_api.get_month_category_by_id(
             budget_id, converted_month, category_id
         )
 
@@ -556,9 +593,13 @@ def get_month_category_by_id(
             "activity": milliunits_to_currency(category.activity),
             "balance": milliunits_to_currency(category.balance),
             "goal_type": category.goal_type,
-            "goal_target": milliunits_to_currency(category.goal_target),
+            "goal_target": milliunits_to_currency(category.goal_target)
+            if category.goal_target is not None
+            else None,
             "goal_percentage_complete": category.goal_percentage_complete,
-            "goal_under_funded": milliunits_to_currency(category.goal_under_funded),
+            "goal_under_funded": milliunits_to_currency(category.goal_under_funded)
+            if category.goal_under_funded is not None
+            else None,
             "budgeted_milliunits": category.budgeted,
             "activity_milliunits": category.activity,
             "balance_milliunits": category.balance,
@@ -578,118 +619,115 @@ def list_transactions(
     budget_id: str | None = None,
 ) -> TransactionsResponse:
     """List transactions with powerful filtering options for financial analysis.
-    
-    IMPORTANT: If the user is asking about their transactions in general (not a specific budget), 
-    you can omit the budget_id parameter entirely. Do NOT call list_budgets first - just 
-    call this tool without budget_id and it will use their default budget automatically.
-    
+
+    IMPORTANT: If the user is asking about a category in their general budget (not a
+    specific budget), you can omit the budget_id parameter entirely. Do NOT call
+    list_budgets first - just call this tool without budget_id and it will use their
+    default budget automatically.
+
     This tool supports various filters that can be combined:
     - Filter by account to see transactions for a specific account
     - Filter by category to analyze spending in a category (e.g., "Dining Out")
     - Filter by payee to see all transactions with a specific merchant (e.g., "Amazon")
     - Filter by date range using since_date
     - Filter by amount range using min_amount and/or max_amount
-    
+
     Example queries this tool can answer:
-    - "Show me all transactions over $50 in Dining Out this year" (use category_id, min_amount, since_date)
+    - "Show me all transactions over $50 in Dining Out this year" (use category_id,
+      min_amount, since_date)
     - "How much have I spent at Amazon this month" (use payee_id, since_date)
     - "List recent transactions in my checking account" (use account_id)
-    
+
     Args:
         account_id: Filter by specific account (optional)
         category_id: Filter by specific category (optional)
         payee_id: Filter by specific payee (optional)
         since_date: Only show transactions on or after this date (optional)
-        min_amount: Only show transactions with amount >= this value (optional, negative for outflows)
-        max_amount: Only show transactions with amount <= this value (optional, negative for outflows)
+        min_amount: Only show transactions with amount >= this value (optional,
+                    negative for outflows)
+        max_amount: Only show transactions with amount <= this value (optional,
+                    negative for outflows)
         limit: Maximum number of transactions to return (default 25)
         offset: Number of transactions to skip for pagination (default 0)
-        budget_id: Budget ID (optional - omit to use default budget automatically)
-        
+        budget_id: Budget ID (optional - omit to use default budget
+        automatically)
+
     Returns:
         TransactionsResponse with filtered transactions and pagination info
     """
     budget_id = budget_id_or_default(budget_id)
-        
+
     with get_ynab_client() as api_client:
         transactions_api = ynab.TransactionsApi(api_client)
-        
+
         # Determine which API method to use based on filters
+        response: ynab.TransactionsResponse | ynab.HybridTransactionsResponse
         if account_id:
             # Use account-specific endpoint if account filter is provided
             response = transactions_api.get_transactions_by_account(
-                budget_id, 
+                budget_id,
                 account_id,
                 since_date=since_date,
-                type=None  # Include all transaction types
+                type=None,  # Include all transaction types
             )
         elif category_id:
             # Use category-specific endpoint if category filter is provided
             response = transactions_api.get_transactions_by_category(
-                budget_id,
-                category_id,
-                since_date=since_date,
-                type=None
+                budget_id, category_id, since_date=since_date, type=None
             )
         elif payee_id:
             # Use payee-specific endpoint if payee filter is provided
             response = transactions_api.get_transactions_by_payee(
-                budget_id,
-                payee_id,
-                since_date=since_date,
-                type=None
+                budget_id, payee_id, since_date=since_date, type=None
             )
         else:
             # Use general transactions endpoint
             response = transactions_api.get_transactions(
-                budget_id,
-                since_date=since_date,
-                type=None
+                budget_id, since_date=since_date, type=None
             )
-            
+
         # Convert and filter transactions
         all_transactions = []
         for txn in response.data.transactions:
             # Skip deleted transactions
             if txn.deleted:
                 continue
-                
+
             # Convert amount from milliunits
             amount = milliunits_to_currency(txn.amount)
-            
+
             # Apply amount filters if specified
             if min_amount is not None and amount < min_amount:
                 continue
             if max_amount is not None and amount > max_amount:
                 continue
-                
+
             # Use helper function to convert transaction
             all_transactions.append(convert_transaction_to_model(txn))
-            
+
         # Sort by date descending (most recent first)
         all_transactions.sort(key=lambda t: t.date, reverse=True)
-        
+
         # Apply pagination
         total_count = len(all_transactions)
         start_index = offset
         end_index = min(offset + limit, total_count)
         transactions_page = all_transactions[start_index:end_index]
-        
+
         has_more = end_index < total_count
         next_offset = end_index if has_more else None
-        
+
         pagination = PaginationInfo(
             total_count=total_count,
             limit=limit,
             offset=offset,
             has_more=has_more,
             next_offset=next_offset,
-            returned_count=len(transactions_page)
+            returned_count=len(transactions_page),
         )
-        
+
         return TransactionsResponse(
-            transactions=transactions_page,
-            pagination=pagination
+            transactions=transactions_page, pagination=pagination
         )
 
 
@@ -700,71 +738,73 @@ def list_payees(
     budget_id: str | None = None,
 ) -> PayeesResponse:
     """List payees for a specific budget with pagination.
-    
-    IMPORTANT: If the user is asking about their payees in general (not a specific budget), 
-    you can omit the budget_id parameter entirely. Do NOT call list_budgets first - just 
-    call this tool without budget_id and it will use their default budget automatically.
-    
+
+    IMPORTANT: If the user is asking about a category in their general budget (not a
+    specific budget), you can omit the budget_id parameter entirely. Do NOT call
+    list_budgets first - just call this tool without budget_id and it will use their
+    default budget automatically.
+
     Payees are the entities you pay money to (merchants, people, companies, etc.).
-    This tool helps you find payee IDs for filtering transactions or analyzing spending patterns.
-    Only returns active payees. Deleted payees are excluded automatically.
-    
+    This tool helps you find payee IDs for filtering transactions or analyzing spending
+    patterns. Only returns active payees. Deleted payees are excluded automatically.
+
     Example queries this tool can answer:
-    - "List all my payees" 
+    - "List all my payees"
     - "Find the payee ID for Amazon"
     - "Show me all merchants I've paid"
-    
+
     Args:
         limit: Maximum number of payees to return (default 50)
         offset: Number of payees to skip for pagination (default 0)
-        budget_id: Budget ID (optional - omit to use default budget automatically)
-        
+        budget_id: Budget ID (optional - omit to use default budget
+        automatically)
+
     Returns:
         PayeesResponse with payees list and pagination information
     """
     budget_id = budget_id_or_default(budget_id)
-    
+
     with get_ynab_client() as api_client:
         payees_api = ynab.PayeesApi(api_client)
         payees_response = payees_api.get_payees(budget_id)
-        
+
         # Filter payees - exclude deleted payees
         all_payees = []
         for payee in payees_response.data.payees:
             # Skip deleted payees
             if payee.deleted:
                 continue
-                
+
             all_payees.append(
                 Payee(
                     id=payee.id,
                     name=payee.name,
                     transfer_account_id=payee.transfer_account_id,
-                    deleted=payee.deleted
+                    deleted=payee.deleted,
                 )
             )
-            
+
         # Sort by name for easier browsing
         all_payees.sort(key=lambda p: p.name.lower())
-        
+
         # Apply pagination
         total_count = len(all_payees)
         start_index = offset
         end_index = min(offset + limit, total_count)
         payees_page = all_payees[start_index:end_index]
-        
+
         has_more = end_index < total_count
         next_offset = end_index if has_more else None
-        
+
         pagination = PaginationInfo(
             total_count=total_count,
             limit=limit,
             offset=offset,
             has_more=has_more,
             next_offset=next_offset,
-            returned_count=len(payees_page)
+            returned_count=len(payees_page),
         )
-        
+
         return PayeesResponse(payees=payees_page, pagination=pagination)
 
 
@@ -775,43 +815,46 @@ def find_payee(
     budget_id: str | None = None,
 ) -> PayeesResponse:
     """Find payees by searching for name substrings (case-insensitive).
-    
-    IMPORTANT: If the user is asking about payees in their general budget (not a specific budget), 
-    you can omit the budget_id parameter entirely. Do NOT call list_budgets first - just 
-    call this tool without budget_id and it will use their default budget automatically.
-    
+
+    IMPORTANT: If the user is asking about a category in their general budget (not a
+    specific budget), you can omit the budget_id parameter entirely. Do NOT call
+    list_budgets first - just call this tool without budget_id and it will use their
+    default budget automatically.
+
     This tool is perfect for finding specific payees when you know part of their name.
     Much more efficient than paginating through all payees with list_payees.
     Only returns active payees. Deleted payees are excluded automatically.
-    
+
     Example queries this tool can answer:
     - "Find Amazon payee ID" (use name_search="amazon")
-    - "Show me all Starbucks locations" (use name_search="starbucks") 
+    - "Show me all Starbucks locations" (use name_search="starbucks")
     - "Find payees with 'grocery' in the name" (use name_search="grocery")
-    
+
     Args:
-        name_search: Search term to match against payee names (case-insensitive substring match)
+        name_search: Search term to match against payee names (case-insensitive
+                     substring match)
         limit: Maximum number of matching payees to return (default 10)
-        budget_id: Budget ID (optional - omit to use default budget automatically)
-        
+        budget_id: Budget ID (optional - omit to use default budget
+        automatically)
+
     Returns:
         PayeesResponse with matching payees and pagination information
     """
     budget_id = budget_id_or_default(budget_id)
-    
+
     with get_ynab_client() as api_client:
         payees_api = ynab.PayeesApi(api_client)
         payees_response = payees_api.get_payees(budget_id)
-        
+
         # Filter payees by name search and deleted status
         search_term = name_search.lower().strip()
         matching_payees = []
-        
+
         for payee in payees_response.data.payees:
             # Skip deleted payees
             if payee.deleted:
                 continue
-                
+
             # Check if search term is in payee name (case-insensitive)
             if search_term in payee.name.lower():
                 matching_payees.append(
@@ -819,27 +862,27 @@ def find_payee(
                         id=payee.id,
                         name=payee.name,
                         transfer_account_id=payee.transfer_account_id,
-                        deleted=payee.deleted
+                        deleted=payee.deleted,
                     )
                 )
-                
+
         # Sort by name for easier browsing
         matching_payees.sort(key=lambda p: p.name.lower())
-        
+
         # Apply limit (no offset since this is a search, not pagination)
         limited_payees = matching_payees[:limit]
-        
+
         # Create pagination info showing search results
         total_count = len(matching_payees)
         has_more = len(matching_payees) > limit
-        
+
         pagination = PaginationInfo(
             total_count=total_count,
             limit=limit,
             offset=0,
             has_more=has_more,
             next_offset=None,  # Search doesn't support offset-based pagination
-            returned_count=len(limited_payees)
+            returned_count=len(limited_payees),
         )
-        
+
         return PayeesResponse(payees=limited_payees, pagination=pagination)

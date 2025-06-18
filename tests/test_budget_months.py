@@ -1,0 +1,334 @@
+"""
+Test budget month and month category-related MCP tools.
+"""
+
+import json
+from datetime import date
+from unittest.mock import MagicMock
+
+import ynab
+from fastmcp import Client
+
+
+async def test_get_budget_month_success(months_api: MagicMock, mcp_client: Client):
+    """Test successful budget month retrieval."""
+    category = ynab.Category(
+        id="cat-1",
+        category_group_id="group-1",
+        category_group_name="Monthly Bills",
+        name="Groceries",
+        hidden=False,
+        original_category_group_id=None,
+        note="Food",
+        budgeted=50000,
+        activity=-30000,
+        balance=20000,
+        goal_type="TB",
+        goal_needs_whole_amount=None,
+        goal_day=None,
+        goal_cadence=None,
+        goal_cadence_frequency=None,
+        goal_creation_month=None,
+        goal_target=100000,
+        goal_target_month=None,
+        goal_percentage_complete=50,
+        goal_months_to_budget=None,
+        goal_under_funded=0,
+        goal_overall_funded=None,
+        goal_overall_left=None,
+        deleted=False,
+    )
+
+    month = ynab.MonthDetail(
+        month=date(2024, 1, 1),
+        note="January budget",
+        income=400000,
+        budgeted=350000,
+        activity=-200000,
+        to_be_budgeted=50000,
+        age_of_money=15,
+        deleted=False,
+        categories=[category],
+    )
+
+    month_response = ynab.MonthDetailResponse(
+        data=ynab.MonthDetailResponseData(month=month)
+    )
+    months_api.get_budget_month.return_value = month_response
+
+    result = await mcp_client.call_tool("get_budget_month", {})
+
+    assert len(result) == 1
+    response_data = json.loads(result[0].text)
+    assert response_data["note"] == "January budget"
+    assert len(response_data["categories"]) == 1
+    assert response_data["categories"][0]["id"] == "cat-1"
+
+
+async def test_get_month_category_by_id_success(
+    months_api: MagicMock, categories_api: MagicMock, mcp_client: Client
+):
+    """Test successful month category retrieval by ID."""
+    mock_category = ynab.Category(
+        id="cat-1",
+        category_group_id="group-1",
+        category_group_name="Monthly Bills",
+        name="Groceries",
+        hidden=False,
+        original_category_group_id=None,
+        note="Food",
+        budgeted=50000,
+        activity=-30000,
+        balance=20000,
+        goal_type="TB",
+        goal_needs_whole_amount=None,
+        goal_day=None,
+        goal_cadence=None,
+        goal_cadence_frequency=None,
+        goal_creation_month=None,
+        goal_target=100000,
+        goal_target_month=None,
+        goal_percentage_complete=50,
+        goal_months_to_budget=None,
+        goal_under_funded=0,
+        goal_overall_funded=None,
+        goal_overall_left=None,
+        deleted=False,
+    )
+
+    category_response = ynab.CategoryResponse(
+        data=ynab.CategoryResponseData(category=mock_category)
+    )
+
+    categories_api.get_month_category_by_id.return_value = category_response
+
+    result = await mcp_client.call_tool(
+        "get_month_category_by_id",
+        {"category_id": "cat-1", "budget_id": "budget-123"},
+    )
+
+    assert len(result) == 1
+    response_data = json.loads(result[0].text)
+    assert response_data["id"] == "cat-1"
+    assert response_data["name"] == "Groceries"
+
+
+async def test_get_month_category_by_id_default_budget(
+    categories_api: MagicMock, mcp_client: Client
+):
+    """Test month category retrieval using default budget."""
+    mock_category = ynab.Category(
+        id="cat-2",
+        category_group_id="group-2",
+        category_group_name="Fun Money",
+        name="Entertainment",
+        hidden=False,
+        original_category_group_id=None,
+        note="Fun stuff",
+        budgeted=25000,
+        activity=-15000,
+        balance=10000,
+        goal_type=None,
+        goal_needs_whole_amount=None,
+        goal_day=None,
+        goal_cadence=None,
+        goal_cadence_frequency=None,
+        goal_creation_month=None,
+        goal_target=None,
+        goal_target_month=None,
+        goal_percentage_complete=None,
+        goal_months_to_budget=None,
+        goal_under_funded=None,
+        goal_overall_funded=None,
+        goal_overall_left=None,
+        deleted=False,
+    )
+
+    category_response = ynab.CategoryResponse(
+        data=ynab.CategoryResponseData(category=mock_category)
+    )
+
+    categories_api.get_month_category_by_id.return_value = category_response
+
+    # Call without budget_id to test default
+    result = await mcp_client.call_tool(
+        "get_month_category_by_id", {"category_id": "cat-2"}
+    )
+
+    assert len(result) == 1
+    response_data = json.loads(result[0].text)
+    assert response_data["id"] == "cat-2"
+    assert response_data["name"] == "Entertainment"
+
+
+async def test_get_budget_month_with_default_budget(
+    months_api: MagicMock, mcp_client: Client
+):
+    """Test budget month retrieval with default budget."""
+    category = ynab.Category(
+        id="cat-default",
+        category_group_id="group-default",
+        category_group_name="Default Group",
+        name="Default Category",
+        hidden=False,
+        original_category_group_id=None,
+        note=None,
+        budgeted=0,
+        activity=0,
+        balance=0,
+        goal_type=None,
+        goal_needs_whole_amount=None,
+        goal_day=None,
+        goal_cadence=None,
+        goal_cadence_frequency=None,
+        goal_creation_month=None,
+        goal_target=None,
+        goal_target_month=None,
+        goal_percentage_complete=None,
+        goal_months_to_budget=None,
+        goal_under_funded=None,
+        goal_overall_funded=None,
+        goal_overall_left=None,
+        deleted=False,
+    )
+
+    month = ynab.MonthDetail(
+        month=date(2024, 2, 1),
+        note=None,
+        income=0,
+        budgeted=0,
+        activity=0,
+        to_be_budgeted=0,
+        age_of_money=None,
+        deleted=False,
+        categories=[category],
+    )
+
+    month_response = ynab.MonthDetailResponse(
+        data=ynab.MonthDetailResponseData(month=month)
+    )
+
+    months_api.get_budget_month.return_value = month_response
+
+    # Call without budget_id to test default
+    result = await mcp_client.call_tool("get_budget_month", {})
+
+    assert len(result) == 1
+    response_data = json.loads(result[0].text)
+    assert len(response_data["categories"]) == 1
+    assert response_data["categories"][0]["id"] == "cat-default"
+
+
+async def test_get_budget_month_filters_deleted_and_hidden(
+    months_api: MagicMock, mcp_client: Client
+):
+    """Test that get_budget_month filters out deleted and hidden categories."""
+    # Create active category
+    active_category = ynab.Category(
+        id="cat-active",
+        category_group_id="group-1",
+        category_group_name="Group 1",
+        name="Active Category",
+        hidden=False,
+        original_category_group_id=None,
+        note=None,
+        budgeted=10000,
+        activity=-5000,
+        balance=5000,
+        goal_type=None,
+        goal_needs_whole_amount=None,
+        goal_day=None,
+        goal_cadence=None,
+        goal_cadence_frequency=None,
+        goal_creation_month=None,
+        goal_target=None,
+        goal_target_month=None,
+        goal_percentage_complete=None,
+        goal_months_to_budget=None,
+        goal_under_funded=None,
+        goal_overall_funded=None,
+        goal_overall_left=None,
+        deleted=False,
+    )
+
+    # Create deleted category (should be filtered out)
+    deleted_category = ynab.Category(
+        id="cat-deleted",
+        category_group_id="group-1",
+        category_group_name="Group 1",
+        name="Deleted Category",
+        hidden=False,
+        original_category_group_id=None,
+        note=None,
+        budgeted=0,
+        activity=0,
+        balance=0,
+        goal_type=None,
+        goal_needs_whole_amount=None,
+        goal_day=None,
+        goal_cadence=None,
+        goal_cadence_frequency=None,
+        goal_creation_month=None,
+        goal_target=None,
+        goal_target_month=None,
+        goal_percentage_complete=None,
+        goal_months_to_budget=None,
+        goal_under_funded=None,
+        goal_overall_funded=None,
+        goal_overall_left=None,
+        deleted=True,
+    )
+
+    # Create hidden category (should be filtered out)
+    hidden_category = ynab.Category(
+        id="cat-hidden",
+        category_group_id="group-1",
+        category_group_name="Group 1",
+        name="Hidden Category",
+        hidden=True,
+        original_category_group_id=None,
+        note=None,
+        budgeted=0,
+        activity=0,
+        balance=0,
+        goal_type=None,
+        goal_needs_whole_amount=None,
+        goal_day=None,
+        goal_cadence=None,
+        goal_cadence_frequency=None,
+        goal_creation_month=None,
+        goal_target=None,
+        goal_target_month=None,
+        goal_percentage_complete=None,
+        goal_months_to_budget=None,
+        goal_under_funded=None,
+        goal_overall_funded=None,
+        goal_overall_left=None,
+        deleted=False,
+    )
+
+    month = ynab.MonthDetail(
+        month=date(2024, 1, 1),
+        note=None,
+        income=100000,
+        budgeted=10000,
+        activity=-5000,
+        to_be_budgeted=95000,
+        age_of_money=10,
+        deleted=False,
+        categories=[active_category, deleted_category, hidden_category],
+    )
+
+    month_response = ynab.MonthDetailResponse(
+        data=ynab.MonthDetailResponseData(month=month)
+    )
+
+    months_api.get_budget_month.return_value = month_response
+
+    result = await mcp_client.call_tool("get_budget_month", {})
+
+    assert len(result) == 1
+    response_data = json.loads(result[0].text)
+    # Should only include the active category
+    assert len(response_data["categories"]) == 1
+    assert response_data["categories"][0]["id"] == "cat-active"

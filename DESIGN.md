@@ -62,7 +62,7 @@ Each use case follows this structure for clarity:
 
 **Why it matters**: Parents track expenses by child or activity for budgeting, tax deductions, or custody arrangements. Finding these across multiple categories and payees is tedious in YNAB.
 
-**MCP Server Role**: 
+**MCP Server Role**:
 - `find_payee()` - Searches for "soccer", "dance academy", etc.
 - `list_transactions()` - Filters by payee_id, date ranges
 - Handles pagination for large transaction sets
@@ -242,7 +242,7 @@ The SDK offers specialized transaction endpoints that could optimize specific us
 - `get_transactions_by_payee()` - Direct payee filtering
 
 **Current approach**: Single `list_transactions()` with flexible filtering
-**Trade-offs**: 
+**Trade-offs**:
 - ✅ Simpler API surface for LLMs to learn
 - ✅ One tool handles all filtering combinations
 - ❌ Potentially less efficient for single-filter queries

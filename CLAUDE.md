@@ -8,9 +8,9 @@ MCP (Model Context Protocol) server for YNAB (You Need A Budget) using FastMCP. 
 
 ```bash
 # Development
-uv sync --group dev              # Install all dependencies
-uv run pytest --cov=server --cov=models --cov-report=term-missing  # Run tests with coverage
-uv run fastmcp run server.py:mcp # Run MCP server
+uv sync --group dev        # Install all dependencies
+pytest --cov=server --cov=models --cov-report=term-missing  # Run tests with coverage
+fastmcp run server.py:mcp  # Run MCP server
 
 # Authentication (required)
 export YNAB_ACCESS_TOKEN=your_token_here
@@ -24,6 +24,7 @@ export YNAB_DEFAULT_BUDGET=your_budget_id_here  # Optional
 3. **Automatically filter out deleted/hidden/closed data** - Only show active, relevant data.
 4. **Use real YNAB SDK models in tests** - Mock only the API calls, not the data structures.
 5. **Handle milliunits properly** - 1000 milliunits = 1 currency unit.
+6. **Try to avoid using abbreviations in names**
 
 ## Product Philosophy
 
@@ -51,6 +52,7 @@ export YNAB_DEFAULT_BUDGET=your_budget_id_here  # Optional
 - Use FastMCP's testing pattern with direct client-server testing
 - Mock YNAB API calls, but use real YNAB model instances
 - Verify pagination works correctly for all listing endpoints
+- Prefer not to use test classes, just simple test functions. Test organization should come through new files
 
 ## Architecture
 

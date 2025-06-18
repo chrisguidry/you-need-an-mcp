@@ -19,7 +19,7 @@ To use this MCP server, you need a YNAB Personal Access Token:
 3. Click on **Developer Settings** in the left sidebar
 4. Click **New Token**
 5. Enter a token name (e.g., "MCP Server")
-6. Click **Generate** 
+6. Click **Generate**
 7. Copy the generated token (you won't be able to see it again)
 
 ### 3. Set Environment Variables
