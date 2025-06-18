@@ -56,6 +56,7 @@ export YNAB_DEFAULT_BUDGET=your_budget_id_here  # Optional
 
 - `server.py` - MCP server implementation using `@mcp.tool()` decorators
 - `models.py` - Pydantic models matching YNAB's data structures
+- `DESIGN.md` - Detailed use cases and design philosophy
 - Uses context managers for YNAB client lifecycle
 - Returns structured JSON with consistent pagination format
 - Handle YNAB API errors gracefully with user-friendly messages
