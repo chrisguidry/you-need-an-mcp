@@ -6,10 +6,13 @@ import json
 from unittest.mock import MagicMock
 
 import ynab
-from fastmcp import Client
+from fastmcp.client import Client, FastMCPTransport
+from mcp.types import TextContent
 
 
-async def test_list_budgets_success(budgets_api: MagicMock, mcp_client: Client):
+async def test_list_budgets_success(
+    budgets_api: MagicMock, mcp_client: Client[FastMCPTransport]
+) -> None:
     """Test successful budget listing."""
     currency_format = ynab.CurrencyFormat(
         iso_code="USD",
@@ -42,14 +45,19 @@ async def test_list_budgets_success(budgets_api: MagicMock, mcp_client: Client):
 
     assert len(result) == 1
     # The result is a list of Budget objects serialized as JSON
-    budgets_data = json.loads(result[0].text)
+    budgets_data = (
+        json.loads(result[0].text) if isinstance(result[0], TextContent) else None
+    )
+    assert budgets_data is not None
     # budgets_data is a single Budget object, not a list
     assert budgets_data["id"] == "budget-123"
     assert budgets_data["name"] == "Test Budget"
     assert budgets_data["currency_format"]["iso_code"] == "USD"
 
 
-async def test_list_budgets_null_currency(budgets_api: MagicMock, mcp_client: Client):
+async def test_list_budgets_null_currency(
+    budgets_api: MagicMock, mcp_client: Client[FastMCPTransport]
+) -> None:
     """Test budget listing with null currency format."""
     test_budget = ynab.BudgetSummary(
         id="budget-456",
@@ -70,6 +78,9 @@ async def test_list_budgets_null_currency(budgets_api: MagicMock, mcp_client: Cl
     result = await mcp_client.call_tool("list_budgets", {})
 
     assert len(result) == 1
-    budgets_data = json.loads(result[0].text)
+    budgets_data = (
+        json.loads(result[0].text) if isinstance(result[0], TextContent) else None
+    )
+    assert budgets_data is not None
     assert budgets_data["id"] == "budget-456"
     assert budgets_data["currency_format"] is None

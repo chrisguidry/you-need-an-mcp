@@ -9,12 +9,13 @@ import json
 from unittest.mock import MagicMock, patch
 
 import ynab
-from fastmcp import Client
+from fastmcp.client import Client, FastMCPTransport
+from mcp.types import TextContent
 
-import server
 
-
-async def test_list_payees_success(payees_api: MagicMock, mcp_client: Client):
+async def test_list_payees_success(
+    payees_api: MagicMock, mcp_client: Client[FastMCPTransport]
+) -> None:
     """Test successful payee listing."""
 
     payee1 = ynab.Payee(
@@ -53,7 +54,10 @@ async def test_list_payees_success(payees_api: MagicMock, mcp_client: Client):
     result = await mcp_client.call_tool("list_payees", {})
 
     assert len(result) == 1
-    response_data = json.loads(result[0].text)
+    response_data = (
+        json.loads(result[0].text) if isinstance(result[0], TextContent) else None
+    )
+    assert response_data is not None
 
     # Should have 3 payees (deleted one excluded)
     assert len(response_data["payees"]) == 3
@@ -73,7 +77,9 @@ async def test_list_payees_success(payees_api: MagicMock, mcp_client: Client):
     assert response_data["pagination"]["has_more"] is False
 
 
-async def test_list_payees_pagination(payees_api: MagicMock, mcp_client: Client):
+async def test_list_payees_pagination(
+    payees_api: MagicMock, mcp_client: Client[FastMCPTransport]
+) -> None:
     """Test payee listing with pagination."""
 
     # Create multiple payees
@@ -96,7 +102,10 @@ async def test_list_payees_pagination(payees_api: MagicMock, mcp_client: Client)
     # Test first page
     result = await mcp_client.call_tool("list_payees", {"limit": 2, "offset": 0})
 
-    response_data = json.loads(result[0].text)
+    response_data = (
+        json.loads(result[0].text) if isinstance(result[0], TextContent) else None
+    )
+    assert response_data is not None
     assert len(response_data["payees"]) == 2
     assert response_data["pagination"]["total_count"] == 5
     assert response_data["pagination"]["has_more"] is True
@@ -107,7 +116,9 @@ async def test_list_payees_pagination(payees_api: MagicMock, mcp_client: Client)
     assert response_data["payees"][1]["name"] == "Store 01"
 
 
-async def test_list_payees_filters_deleted(payees_api: MagicMock, mcp_client: Client):
+async def test_list_payees_filters_deleted(
+    payees_api: MagicMock, mcp_client: Client[FastMCPTransport]
+) -> None:
     """Test that list_payees automatically filters out deleted payees."""
 
     # Active payee (should be included)
@@ -136,14 +147,19 @@ async def test_list_payees_filters_deleted(payees_api: MagicMock, mcp_client: Cl
 
     result = await mcp_client.call_tool("list_payees", {})
 
-    response_data = json.loads(result[0].text)
+    response_data = (
+        json.loads(result[0].text) if isinstance(result[0], TextContent) else None
+    )
+    assert response_data is not None
     # Should only include the active payee
     assert len(response_data["payees"]) == 1
     assert response_data["payees"][0]["name"] == "Active Store"
     assert response_data["payees"][0]["id"] == "payee-active"
 
 
-async def test_find_payee_filters_deleted(payees_api: MagicMock, mcp_client: Client):
+async def test_find_payee_filters_deleted(
+    payees_api: MagicMock, mcp_client: Client[FastMCPTransport]
+) -> None:
     """Test that find_payee automatically filters out deleted payees."""
 
     # Both payees have "amazon" in name, but one is deleted
@@ -168,14 +184,19 @@ async def test_find_payee_filters_deleted(payees_api: MagicMock, mcp_client: Cli
 
     result = await mcp_client.call_tool("find_payee", {"name_search": "amazon"})
 
-    response_data = json.loads(result[0].text)
+    response_data = (
+        json.loads(result[0].text) if isinstance(result[0], TextContent) else None
+    )
+    assert response_data is not None
     # Should only find the active Amazon payee, not the deleted one
     assert len(response_data["payees"]) == 1
     assert response_data["payees"][0]["name"] == "Amazon"
     assert response_data["payees"][0]["id"] == "payee-active"
 
 
-async def test_find_payee_success(payees_api: MagicMock, mcp_client: Client):
+async def test_find_payee_success(
+    payees_api: MagicMock, mcp_client: Client[FastMCPTransport]
+) -> None:
     """Test successful payee search by name."""
 
     # Create payees with different names for searching
@@ -221,7 +242,10 @@ async def test_find_payee_success(payees_api: MagicMock, mcp_client: Client):
     # Test searching for "amazon" (case-insensitive)
     result = await mcp_client.call_tool("find_payee", {"name_search": "amazon"})
 
-    response_data = json.loads(result[0].text)
+    response_data = (
+        json.loads(result[0].text) if isinstance(result[0], TextContent) else None
+    )
+    assert response_data is not None
     # Should find Amazon and Amazon Web Services, but not deleted Amazon Prime
     assert len(response_data["payees"]) == 2
     assert response_data["pagination"]["total_count"] == 2
@@ -232,7 +256,9 @@ async def test_find_payee_success(payees_api: MagicMock, mcp_client: Client):
     assert payee_names == ["Amazon", "Amazon Web Services"]
 
 
-async def test_find_payee_case_insensitive(payees_api: MagicMock, mcp_client: Client):
+async def test_find_payee_case_insensitive(
+    payees_api: MagicMock, mcp_client: Client[FastMCPTransport]
+) -> None:
     """Test that payee search is case-insensitive."""
 
     payees = [
@@ -263,13 +289,18 @@ async def test_find_payee_case_insensitive(payees_api: MagicMock, mcp_client: Cl
     for search_term, expected_count in search_terms_matches:
         result = await mcp_client.call_tool("find_payee", {"name_search": search_term})
 
-        response_data = json.loads(result[0].text)
+        response_data = (
+            json.loads(result[0].text) if isinstance(result[0], TextContent) else None
+        )
+        assert response_data is not None
         assert len(response_data["payees"]) == expected_count
         if expected_count > 0:
             assert response_data["payees"][0]["name"] == "Starbucks Coffee"
 
 
-async def test_find_payee_limit(payees_api: MagicMock, mcp_client: Client):
+async def test_find_payee_limit(
+    payees_api: MagicMock, mcp_client: Client[FastMCPTransport]
+) -> None:
     """Test payee search with limit parameter."""
 
     # Create multiple payees with "store" in the name
@@ -295,7 +326,10 @@ async def test_find_payee_limit(payees_api: MagicMock, mcp_client: Client):
         "find_payee", {"name_search": "store", "limit": 2}
     )
 
-    response_data = json.loads(result[0].text)
+    response_data = (
+        json.loads(result[0].text) if isinstance(result[0], TextContent) else None
+    )
+    assert response_data is not None
     assert len(response_data["payees"]) == 2
     assert response_data["pagination"]["total_count"] == 5
     assert response_data["pagination"]["has_more"] is True
@@ -306,7 +340,9 @@ async def test_find_payee_limit(payees_api: MagicMock, mcp_client: Client):
     assert response_data["payees"][1]["name"] == "Store 01"
 
 
-async def test_find_payee_no_matches(payees_api: MagicMock, mcp_client: Client):
+async def test_find_payee_no_matches(
+    payees_api: MagicMock, mcp_client: Client[FastMCPTransport]
+) -> None:
     """Test payee search with no matching results."""
 
     payees = [
@@ -323,7 +359,10 @@ async def test_find_payee_no_matches(payees_api: MagicMock, mcp_client: Client):
 
     result = await mcp_client.call_tool("find_payee", {"name_search": "nonexistent"})
 
-    response_data = json.loads(result[0].text)
+    response_data = (
+        json.loads(result[0].text) if isinstance(result[0], TextContent) else None
+    )
+    assert response_data is not None
     assert len(response_data["payees"]) == 0
     assert response_data["pagination"]["total_count"] == 0
     assert response_data["pagination"]["has_more"] is False
@@ -333,7 +372,7 @@ async def test_find_payee_no_matches(payees_api: MagicMock, mcp_client: Client):
 async def test_find_payee_budget_id_or_default(
     mock_environment_variables: None,
     payees_api: MagicMock,
-    mcp_client: Client,
+    mcp_client: Client[FastMCPTransport],
 ) -> None:
     """Test find_payee uses budget_id_or_default helper."""
 
@@ -346,10 +385,9 @@ async def test_find_payee_budget_id_or_default(
     with patch("server.budget_id_or_default") as mock_budget_helper:
         mock_budget_helper.return_value = "default-budget-123"
 
-        async with Client(server.mcp) as client:
-            await mcp_client.call_tool("find_payee", {"name_search": "test"})
+        await mcp_client.call_tool("find_payee", {"name_search": "test"})
 
-            # Should call the helper with None
-            mock_budget_helper.assert_called_once_with(None)
-            # Should call the API with the returned budget ID
-            payees_api.get_payees.assert_called_once_with("default-budget-123")
+        # Should call the helper with None
+        mock_budget_helper.assert_called_once_with(None)
+        # Should call the API with the returned budget ID
+        payees_api.get_payees.assert_called_once_with("default-budget-123")

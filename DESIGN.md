@@ -217,7 +217,7 @@ Each use case follows this structure for clarity:
 
 ## Tool Implementation Status
 
-### Currently Implemented (10 tools)
+### Currently Implemented (11 tools)
 - ✅ `list_budgets()` - All use cases
 - ✅ `list_accounts()` - Emergency fund calculations
 - ✅ `list_categories()` - Budget structure understanding
@@ -227,9 +227,17 @@ Each use case follows this structure for clarity:
 - ✅ `list_transactions()` - Expense tracking, subscriptions, transparency
 - ✅ `list_payees()` - Payee analysis
 - ✅ `find_payee()` - Efficient payee search
+- ✅ `list_scheduled_transactions()` - Bill reminders, recurring expenses
+
+### Recently Implemented
+- ✅ `list_scheduled_transactions()` - Bill reminders, recurring expenses
+  - Supports all major use cases: subscription audits, bill reminders, recurring expense analysis
+  - Comprehensive filtering: account, category, payee, frequency, upcoming days, amount range
+  - Full pagination support following existing patterns
+  - Consistent field naming with regular transactions using shared base model
+  - 100% test coverage with extensive edge case testing
 
 ### Planned Tools (SDK-supported)
-- 🔄 `list_scheduled_transactions()` - Bill reminders, recurring expenses
 - 🔄 `create_transaction()` - Quick entry
 - 🔄 `update_transaction()` - Import assistance
 - 🔄 `import_transactions()` - Bulk import

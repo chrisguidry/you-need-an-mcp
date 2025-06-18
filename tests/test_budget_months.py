@@ -7,10 +7,13 @@ from datetime import date
 from unittest.mock import MagicMock
 
 import ynab
-from fastmcp import Client
+from fastmcp.client import Client, FastMCPTransport
+from mcp.types import TextContent
 
 
-async def test_get_budget_month_success(months_api: MagicMock, mcp_client: Client):
+async def test_get_budget_month_success(
+    months_api: MagicMock, mcp_client: Client[FastMCPTransport]
+) -> None:
     """Test successful budget month retrieval."""
     category = ynab.Category(
         id="cat-1",
@@ -59,15 +62,20 @@ async def test_get_budget_month_success(months_api: MagicMock, mcp_client: Clien
     result = await mcp_client.call_tool("get_budget_month", {})
 
     assert len(result) == 1
-    response_data = json.loads(result[0].text)
+    response_data = (
+        json.loads(result[0].text) if isinstance(result[0], TextContent) else None
+    )
+    assert response_data is not None
     assert response_data["note"] == "January budget"
     assert len(response_data["categories"]) == 1
     assert response_data["categories"][0]["id"] == "cat-1"
 
 
 async def test_get_month_category_by_id_success(
-    months_api: MagicMock, categories_api: MagicMock, mcp_client: Client
-):
+    months_api: MagicMock,
+    categories_api: MagicMock,
+    mcp_client: Client[FastMCPTransport],
+) -> None:
     """Test successful month category retrieval by ID."""
     mock_category = ynab.Category(
         id="cat-1",
@@ -108,14 +116,17 @@ async def test_get_month_category_by_id_success(
     )
 
     assert len(result) == 1
-    response_data = json.loads(result[0].text)
+    response_data = (
+        json.loads(result[0].text) if isinstance(result[0], TextContent) else None
+    )
+    assert response_data is not None
     assert response_data["id"] == "cat-1"
     assert response_data["name"] == "Groceries"
 
 
 async def test_get_month_category_by_id_default_budget(
-    categories_api: MagicMock, mcp_client: Client
-):
+    categories_api: MagicMock, mcp_client: Client[FastMCPTransport]
+) -> None:
     """Test month category retrieval using default budget."""
     mock_category = ynab.Category(
         id="cat-2",
@@ -156,14 +167,17 @@ async def test_get_month_category_by_id_default_budget(
     )
 
     assert len(result) == 1
-    response_data = json.loads(result[0].text)
+    response_data = (
+        json.loads(result[0].text) if isinstance(result[0], TextContent) else None
+    )
+    assert response_data is not None
     assert response_data["id"] == "cat-2"
     assert response_data["name"] == "Entertainment"
 
 
 async def test_get_budget_month_with_default_budget(
-    months_api: MagicMock, mcp_client: Client
-):
+    months_api: MagicMock, mcp_client: Client[FastMCPTransport]
+) -> None:
     """Test budget month retrieval with default budget."""
     category = ynab.Category(
         id="cat-default",
@@ -214,14 +228,17 @@ async def test_get_budget_month_with_default_budget(
     result = await mcp_client.call_tool("get_budget_month", {})
 
     assert len(result) == 1
-    response_data = json.loads(result[0].text)
+    response_data = (
+        json.loads(result[0].text) if isinstance(result[0], TextContent) else None
+    )
+    assert response_data is not None
     assert len(response_data["categories"]) == 1
     assert response_data["categories"][0]["id"] == "cat-default"
 
 
 async def test_get_budget_month_filters_deleted_and_hidden(
-    months_api: MagicMock, mcp_client: Client
-):
+    months_api: MagicMock, mcp_client: Client[FastMCPTransport]
+) -> None:
     """Test that get_budget_month filters out deleted and hidden categories."""
     # Create active category
     active_category = ynab.Category(
@@ -328,7 +345,10 @@ async def test_get_budget_month_filters_deleted_and_hidden(
     result = await mcp_client.call_tool("get_budget_month", {})
 
     assert len(result) == 1
-    response_data = json.loads(result[0].text)
+    response_data = (
+        json.loads(result[0].text) if isinstance(result[0], TextContent) else None
+    )
+    assert response_data is not None
     # Should only include the active category
     assert len(response_data["categories"]) == 1
     assert response_data["categories"][0]["id"] == "cat-active"

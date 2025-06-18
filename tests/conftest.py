@@ -12,6 +12,7 @@ from unittest.mock import MagicMock, Mock, patch
 import fastmcp
 import pytest
 import ynab
+from fastmcp.client import Client, FastMCPTransport
 
 # Add parent directory to path to import server module
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -79,7 +80,16 @@ def transactions_api(ynab_client: MagicMock) -> Generator[MagicMock, None, None]
 
 
 @pytest.fixture
-async def mcp_client() -> AsyncGenerator[fastmcp.Client, None]:
+def scheduled_transactions_api(
+    ynab_client: MagicMock,
+) -> Generator[MagicMock, None, None]:
+    mock_api = Mock(spec=ynab.ScheduledTransactionsApi)
+    with patch("ynab.ScheduledTransactionsApi", return_value=mock_api):
+        yield mock_api
+
+
+@pytest.fixture
+async def mcp_client() -> AsyncGenerator[Client[FastMCPTransport], None]:
     """Mock MCP client with proper autospec for testing."""
     async with fastmcp.Client(server.mcp) as client:
         yield client

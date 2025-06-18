@@ -11,7 +11,7 @@ import pytest
 import server
 
 
-def test_decimal_precision_milliunits_conversion():
+def test_decimal_precision_milliunits_conversion() -> None:
     """Test that milliunits conversion maintains Decimal precision."""
     # Test various milliunits values that could lose precision with floats
     test_cases = [
@@ -26,7 +26,9 @@ def test_decimal_precision_milliunits_conversion():
     ]
 
     for milliunits, expected in test_cases:
-        result = server.milliunits_to_currency(milliunits)
+        from models import milliunits_to_currency
+
+        result = milliunits_to_currency(milliunits)
         assert result == expected, (
             f"Failed for {milliunits}: got {result}, expected {expected}"
         )
@@ -36,45 +38,53 @@ def test_decimal_precision_milliunits_conversion():
         )
 
 
-def test_milliunits_to_currency_valid_input():
+def test_milliunits_to_currency_valid_input() -> None:
     """Test milliunits conversion with valid input."""
-    result = server.milliunits_to_currency(123456)
+    from models import milliunits_to_currency
+
+    result = milliunits_to_currency(123456)
     assert result == Decimal("123.456")
 
 
-def test_milliunits_to_currency_none_input():
+def test_milliunits_to_currency_none_input() -> None:
     """Test milliunits conversion with None input raises TypeError."""
     with pytest.raises(TypeError):
-        server.milliunits_to_currency(None)  # type: ignore
+        from models import milliunits_to_currency
+
+        milliunits_to_currency(None)  # type: ignore
 
 
-def test_milliunits_to_currency_zero():
+def test_milliunits_to_currency_zero() -> None:
     """Test milliunits conversion with zero."""
-    result = server.milliunits_to_currency(0)
+    from models import milliunits_to_currency
+
+    result = milliunits_to_currency(0)
     assert result == Decimal("0")
 
 
-def test_milliunits_to_currency_negative():
+def test_milliunits_to_currency_negative() -> None:
     """Test milliunits conversion with negative value."""
-    result = server.milliunits_to_currency(-50000)
+    from models import milliunits_to_currency
+
+    result = milliunits_to_currency(-50000)
     assert result == Decimal("-50")
 
 
-def test_get_default_budget_id_with_env_var(monkeypatch: pytest.MonkeyPatch):
+def test_get_default_budget_id_with_env_var(monkeypatch: pytest.MonkeyPatch) -> None:
     """Test getting default budget ID when environment variable is set."""
     monkeypatch.setenv("YNAB_DEFAULT_BUDGET", "test-budget-123")
     result = server.get_default_budget_id()
     assert result == "test-budget-123"
 
 
-def test_get_default_budget_id_missing_env_var(monkeypatch: pytest.MonkeyPatch):
+def test_get_default_budget_id_missing_env_var(monkeypatch: pytest.MonkeyPatch) -> None:
     """Test getting default budget ID when environment variable is missing."""
     monkeypatch.delenv("YNAB_DEFAULT_BUDGET", raising=False)
     with pytest.raises(ValueError, match="budget_id is required"):
         server.get_default_budget_id()
 
 
-def test_get_ynab_client_with_token(monkeypatch: pytest.MonkeyPatch):
+def test_get_ynab_client_with_token(monkeypatch: pytest.MonkeyPatch) -> None:
     """Test YNAB client creation with valid token."""
     monkeypatch.setenv("YNAB_ACCESS_TOKEN", "test_token")
     with (
@@ -86,7 +96,7 @@ def test_get_ynab_client_with_token(monkeypatch: pytest.MonkeyPatch):
         mock_client.assert_called_once()
 
 
-def test_get_ynab_client_missing_token(monkeypatch: pytest.MonkeyPatch):
+def test_get_ynab_client_missing_token(monkeypatch: pytest.MonkeyPatch) -> None:
     """Test YNAB client creation without token."""
     monkeypatch.delenv("YNAB_ACCESS_TOKEN", raising=False)
     with pytest.raises(
@@ -95,14 +105,14 @@ def test_get_ynab_client_missing_token(monkeypatch: pytest.MonkeyPatch):
         server.get_ynab_client()
 
 
-def test_convert_month_to_date_with_date_object():
+def test_convert_month_to_date_with_date_object() -> None:
     """Test convert_month_to_date with date object returns unchanged."""
     test_date = date(2024, 3, 15)
     result = server.convert_month_to_date(test_date)
     assert result == test_date
 
 
-def test_convert_month_to_date_with_current():
+def test_convert_month_to_date_with_current() -> None:
     """Test convert_month_to_date with 'current' returns current month date."""
     with patch("server.datetime") as mock_datetime:
         mock_datetime.now.return_value = datetime(2024, 9, 20, 16, 45, 0)
@@ -111,7 +121,7 @@ def test_convert_month_to_date_with_current():
         assert result == date(2024, 9, 1)
 
 
-def test_convert_month_to_date_with_last_and_next():
+def test_convert_month_to_date_with_last_and_next() -> None:
     """Test convert_month_to_date with 'last' and 'next' literals."""
     # Test normal month (June -> May and July)
     with patch("server.datetime") as mock_datetime:
@@ -144,44 +154,48 @@ def test_convert_month_to_date_with_last_and_next():
         assert result_next == date(2025, 1, 1)
 
 
-def test_convert_month_to_date_invalid_value():
+def test_convert_month_to_date_invalid_value() -> None:
     """Test convert_month_to_date with invalid value raises error."""
     with pytest.raises(ValueError, match="Invalid month value: invalid"):
-        server.convert_month_to_date("invalid")
+        server.convert_month_to_date("invalid")  # type: ignore[arg-type]
 
 
-def test_budget_id_or_default_with_value():
+def test_budget_id_or_default_with_value() -> None:
     """Test budget_id_or_default returns provided value when not None."""
     result = server.budget_id_or_default("custom-budget-123")
     assert result == "custom-budget-123"
 
 
-def test_budget_id_or_default_with_none(monkeypatch: pytest.MonkeyPatch):
+def test_budget_id_or_default_with_none(monkeypatch: pytest.MonkeyPatch) -> None:
     """Test budget_id_or_default returns default when None."""
     monkeypatch.setenv("YNAB_DEFAULT_BUDGET", "default-budget-456")
     result = server.budget_id_or_default(None)
     assert result == "default-budget-456"
 
 
-def test_budget_id_or_default_with_none_missing_env(monkeypatch: pytest.MonkeyPatch):
+def test_budget_id_or_default_with_none_missing_env(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """Test budget_id_or_default raises error when None and no env var."""
     monkeypatch.delenv("YNAB_DEFAULT_BUDGET", raising=False)
     with pytest.raises(ValueError, match="budget_id is required"):
         server.budget_id_or_default(None)
 
 
-def test_convert_transaction_to_model_basic():
-    """Test convert_transaction_to_model with basic transaction."""
+def test_convert_transaction_to_model_basic() -> None:
+    """Test Transaction.from_ynab with basic transaction."""
     import ynab
+
+    from models import Transaction
 
     txn = ynab.TransactionDetail(
         id="txn-123",
-        var_date=date(2024, 6, 15),
+        date=date(2024, 6, 15),
         amount=-50000,
         memo="Test transaction",
-        cleared="cleared",
+        cleared=ynab.TransactionClearedStatus.CLEARED,
         approved=True,
-        flag_color="red",
+        flag_color=ynab.TransactionFlagColor.RED,
         account_id="acc-1",
         payee_id="payee-1",
         category_id="cat-1",
@@ -199,7 +213,7 @@ def test_convert_transaction_to_model_basic():
         subtransactions=[],
     )
 
-    result = server.convert_transaction_to_model(txn)
+    result = Transaction.from_ynab(txn)
 
     assert result.id == "txn-123"
     assert result.date == date(2024, 6, 15)
@@ -210,16 +224,18 @@ def test_convert_transaction_to_model_basic():
     assert result.subtransactions is None
 
 
-def test_convert_transaction_to_model_without_optional_attributes():
-    """Test convert_transaction_to_model with HybridTransaction."""
+def test_convert_transaction_to_model_without_optional_attributes() -> None:
+    """Test Transaction.from_ynab with minimal TransactionDetail."""
     import ynab
 
-    hybrid_txn = ynab.HybridTransaction(
+    from models import Transaction
+
+    minimal_txn = ynab.TransactionDetail(
         id="txn-456",
-        var_date=date(2024, 6, 16),
+        date=date(2024, 6, 16),
         amount=-25000,
-        memo="Hybrid transaction",
-        cleared="uncleared",
+        memo="Minimal transaction",
+        cleared=ynab.TransactionClearedStatus.UNCLEARED,
         approved=True,
         flag_color=None,
         account_id="acc-2",
@@ -231,17 +247,27 @@ def test_convert_transaction_to_model_without_optional_attributes():
         import_id=None,
         import_payee_name=None,
         import_payee_name_original=None,
+        debt_transaction_type=None,
         deleted=False,
-        type="transaction",
         account_name="Test Account 2",
         payee_name="Test Payee 2",
         category_name="Test Category 2",
+        subtransactions=[],
     )
 
-    result = server.convert_transaction_to_model(hybrid_txn)
+    result = Transaction.from_ynab(minimal_txn)
 
     assert result.id == "txn-456"
     assert result.account_name == "Test Account 2"
     assert result.payee_name == "Test Payee 2"
     assert result.category_name == "Test Category 2"
-    assert result.subtransactions is None
+
+
+def test_milliunits_to_currency_from_models() -> None:
+    """Test milliunits_to_currency function from models module."""
+    from models import milliunits_to_currency
+
+    assert milliunits_to_currency(50000) == Decimal("50")
+    assert milliunits_to_currency(-25000) == Decimal("-25")
+    assert milliunits_to_currency(1000) == Decimal("1")
+    assert milliunits_to_currency(0) == Decimal("0")

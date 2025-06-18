@@ -6,12 +6,15 @@ import json
 from unittest.mock import MagicMock
 
 import ynab
-from fastmcp import Client
+from fastmcp.client import Client, FastMCPTransport
+from mcp.types import TextContent
 
 
 async def test_list_categories_success(
-    mock_environment_variables: None, categories_api: MagicMock, mcp_client: Client
-):
+    mock_environment_variables: None,
+    categories_api: MagicMock,
+    mcp_client: Client[FastMCPTransport],
+) -> None:
     """Test successful category listing."""
     visible_category = ynab.Category(
         id="cat-1",
@@ -86,7 +89,10 @@ async def test_list_categories_success(
     result = await mcp_client.call_tool("list_categories", {})
 
     assert len(result) == 1
-    response_data = json.loads(result[0].text)
+    response_data = (
+        json.loads(result[0].text) if isinstance(result[0], TextContent) else None
+    )
+    assert response_data is not None
     # Should only include visible category
     assert len(response_data["categories"]) == 1
     assert response_data["categories"][0]["id"] == "cat-1"
@@ -94,8 +100,10 @@ async def test_list_categories_success(
 
 
 async def test_list_category_groups_success(
-    mock_environment_variables: None, categories_api: MagicMock, mcp_client: Client
-):
+    mock_environment_variables: None,
+    categories_api: MagicMock,
+    mcp_client: Client[FastMCPTransport],
+) -> None:
     """Test successful category group listing."""
 
     category = ynab.Category(
@@ -144,16 +152,23 @@ async def test_list_category_groups_success(
     result = await mcp_client.call_tool("list_category_groups", {})
 
     assert len(result) == 1
-    groups_data = json.loads(result[0].text)
-    # groups_data is a single group object
-    assert groups_data["id"] == "group-1"
-    assert groups_data["name"] == "Monthly Bills"
+    groups_data = (
+        json.loads(result[0].text) if isinstance(result[0], TextContent) else None
+    )
+    assert groups_data is not None
+    # groups_data now contains category_groups list
+    assert len(groups_data["category_groups"]) == 1
+    group = groups_data["category_groups"][0]
+    assert group["id"] == "group-1"
+    assert group["name"] == "Monthly Bills"
 
 
 async def test_list_categories_filters_deleted_and_hidden(
-    mock_environment_variables: None, categories_api: MagicMock, mcp_client: Client
-):
-    """Test that list_categories automatically filters out deleted and hidden categories."""
+    mock_environment_variables: None,
+    categories_api: MagicMock,
+    mcp_client: Client[FastMCPTransport],
+) -> None:
+    """Test that list_categories automatically filters out deleted and hidden."""
 
     # Active category (should be included)
     mock_active_category = ynab.Category(
@@ -241,7 +256,10 @@ async def test_list_categories_filters_deleted_and_hidden(
     result = await mcp_client.call_tool("list_categories", {})
 
     assert len(result) == 1
-    response_data = json.loads(result[0].text)
+    response_data = (
+        json.loads(result[0].text) if isinstance(result[0], TextContent) else None
+    )
+    assert response_data is not None
     # Should only include the active category
     assert len(response_data["categories"]) == 1
     assert response_data["categories"][0]["id"] == "cat-active"
@@ -249,8 +267,10 @@ async def test_list_categories_filters_deleted_and_hidden(
 
 
 async def test_list_category_groups_filters_deleted(
-    mock_environment_variables: None, categories_api: MagicMock, mcp_client: Client
-):
+    mock_environment_variables: None,
+    categories_api: MagicMock,
+    mcp_client: Client[FastMCPTransport],
+) -> None:
     """Test that list_category_groups automatically filters out deleted groups."""
 
     # Active group (should be included)
@@ -282,7 +302,12 @@ async def test_list_category_groups_filters_deleted(
     result = await mcp_client.call_tool("list_category_groups", {})
 
     assert len(result) == 1
-    response_data = json.loads(result[0].text)
-    # Should only include the active group (returns single group object when filtered to one)
-    assert response_data["id"] == "group-active"
-    assert response_data["name"] == "Active Group"
+    response_data = (
+        json.loads(result[0].text) if isinstance(result[0], TextContent) else None
+    )
+    assert response_data is not None
+    # Should only include the active group in the category_groups list
+    assert len(response_data["category_groups"]) == 1
+    group = response_data["category_groups"][0]
+    assert group["id"] == "group-active"
+    assert group["name"] == "Active Group"

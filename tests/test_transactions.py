@@ -9,20 +9,23 @@ from datetime import date
 from unittest.mock import MagicMock
 
 import ynab
-from fastmcp import Client
+from fastmcp.client import Client, FastMCPTransport
+from mcp.types import TextContent
 
 
-async def test_list_transactions_basic(transactions_api: MagicMock, mcp_client: Client):
+async def test_list_transactions_basic(
+    transactions_api: MagicMock, mcp_client: Client[FastMCPTransport]
+) -> None:
     """Test basic transaction listing without filters."""
 
     txn1 = ynab.TransactionDetail(
         id="txn-1",
-        var_date=date(2024, 1, 15),
+        date=date(2024, 1, 15),
         amount=-50000,  # -$50.00 outflow
         memo="Grocery shopping",
-        cleared="cleared",
+        cleared=ynab.TransactionClearedStatus.CLEARED,
         approved=True,
-        flag_color="red",
+        flag_color=ynab.TransactionFlagColor.RED,
         account_id="acc-1",
         account_name="Checking",
         payee_id="payee-1",
@@ -42,10 +45,10 @@ async def test_list_transactions_basic(transactions_api: MagicMock, mcp_client: 
 
     txn2 = ynab.TransactionDetail(
         id="txn-2",
-        var_date=date(2024, 1, 20),
+        date=date(2024, 1, 20),
         amount=-75000,  # -$75.00 outflow
         memo="Dinner",
-        cleared="uncleared",
+        cleared=ynab.TransactionClearedStatus.UNCLEARED,
         approved=True,
         flag_color=None,
         account_id="acc-1",
@@ -68,10 +71,10 @@ async def test_list_transactions_basic(transactions_api: MagicMock, mcp_client: 
     # Add a deleted transaction that should be filtered out
     txn_deleted = ynab.TransactionDetail(
         id="txn-deleted",
-        var_date=date(2024, 1, 10),
+        date=date(2024, 1, 10),
         amount=-25000,
         memo="Deleted transaction",
-        cleared="cleared",
+        cleared=ynab.TransactionClearedStatus.CLEARED,
         approved=True,
         flag_color=None,
         account_id="acc-1",
@@ -103,7 +106,10 @@ async def test_list_transactions_basic(transactions_api: MagicMock, mcp_client: 
     result = await mcp_client.call_tool("list_transactions", {})
 
     assert len(result) == 1
-    response_data = json.loads(result[0].text)
+    response_data = (
+        json.loads(result[0].text) if isinstance(result[0], TextContent) else None
+    )
+    assert response_data is not None
 
     # Should have 2 transactions (deleted one excluded)
     assert len(response_data["transactions"]) == 2
@@ -128,16 +134,16 @@ async def test_list_transactions_basic(transactions_api: MagicMock, mcp_client: 
 
 async def test_list_transactions_with_account_filter(
     transactions_api: MagicMock,
-    mcp_client: Client,
+    mcp_client: Client[FastMCPTransport],
 ) -> None:
     """Test transaction listing filtered by account."""
     # Create transaction
     txn = ynab.TransactionDetail(
         id="txn-acc-1",
-        var_date=date(2024, 2, 1),
+        date=date(2024, 2, 1),
         amount=-30000,
         memo="Account filtered",
-        cleared="cleared",
+        cleared=ynab.TransactionClearedStatus.CLEARED,
         approved=True,
         flag_color=None,
         account_id="acc-checking",
@@ -168,7 +174,10 @@ async def test_list_transactions_with_account_filter(
     )
 
     assert len(result) == 1
-    response_data = json.loads(result[0].text)
+    response_data = (
+        json.loads(result[0].text) if isinstance(result[0], TextContent) else None
+    )
+    assert response_data is not None
     assert len(response_data["transactions"]) == 1
     assert response_data["transactions"][0]["account_id"] == "acc-checking"
 
@@ -180,16 +189,16 @@ async def test_list_transactions_with_account_filter(
 
 async def test_list_transactions_with_amount_filters(
     transactions_api: MagicMock,
-    mcp_client: Client,
+    mcp_client: Client[FastMCPTransport],
 ) -> None:
     """Test transaction listing with amount range filters."""
     # Create transactions with different amounts
     txn_small = ynab.TransactionDetail(
         id="txn-small",
-        var_date=date(2024, 3, 1),
+        date=date(2024, 3, 1),
         amount=-25000,  # -$25
         memo="Small purchase",
-        cleared="cleared",
+        cleared=ynab.TransactionClearedStatus.CLEARED,
         approved=True,
         flag_color=None,
         account_id="acc-1",
@@ -211,10 +220,10 @@ async def test_list_transactions_with_amount_filters(
 
     txn_medium = ynab.TransactionDetail(
         id="txn-medium",
-        var_date=date(2024, 3, 2),
+        date=date(2024, 3, 2),
         amount=-60000,  # -$60
         memo="Medium purchase",
-        cleared="cleared",
+        cleared=ynab.TransactionClearedStatus.CLEARED,
         approved=True,
         flag_color=None,
         account_id="acc-1",
@@ -236,10 +245,10 @@ async def test_list_transactions_with_amount_filters(
 
     txn_large = ynab.TransactionDetail(
         id="txn-large",
-        var_date=date(2024, 3, 3),
+        date=date(2024, 3, 3),
         amount=-120000,  # -$120
         memo="Large purchase",
-        cleared="cleared",
+        cleared=ynab.TransactionClearedStatus.CLEARED,
         approved=True,
         flag_color=None,
         account_id="acc-1",
@@ -275,7 +284,10 @@ async def test_list_transactions_with_amount_filters(
         },
     )
 
-    response_data = json.loads(result[0].text)
+    response_data = (
+        json.loads(result[0].text) if isinstance(result[0], TextContent) else None
+    )
+    assert response_data is not None
     # Should only include small transaction (-$25 > -$50)
     assert len(response_data["transactions"]) == 1
     assert response_data["transactions"][0]["id"] == "txn-small"
@@ -288,7 +300,10 @@ async def test_list_transactions_with_amount_filters(
         },
     )
 
-    response_data = json.loads(result[0].text)
+    response_data = (
+        json.loads(result[0].text) if isinstance(result[0], TextContent) else None
+    )
+    assert response_data is not None
     # Should only include large transaction (-$120 < -$100)
     assert len(response_data["transactions"]) == 1
     assert response_data["transactions"][0]["id"] == "txn-large"
@@ -302,14 +317,17 @@ async def test_list_transactions_with_amount_filters(
         },
     )
 
-    response_data = json.loads(result[0].text)
+    response_data = (
+        json.loads(result[0].text) if isinstance(result[0], TextContent) else None
+    )
+    assert response_data is not None
     # Should only include medium transaction (-$60)
     assert len(response_data["transactions"]) == 1
     assert response_data["transactions"][0]["id"] == "txn-medium"
 
 
 async def test_list_transactions_with_subtransactions(
-    transactions_api: MagicMock, mcp_client: Client
+    transactions_api: MagicMock, mcp_client: Client[FastMCPTransport]
 ) -> None:
     """Test transaction listing with split transactions (subtransactions)."""
     sub1 = ynab.SubTransaction(
@@ -358,10 +376,10 @@ async def test_list_transactions_with_subtransactions(
     # Create split transaction
     txn_split = ynab.TransactionDetail(
         id="txn-split",
-        var_date=date(2024, 4, 1),
+        date=date(2024, 4, 1),
         amount=-50000,  # -$50 total
         memo="Split transaction at Target",
-        cleared="cleared",
+        cleared=ynab.TransactionClearedStatus.CLEARED,
         approved=True,
         flag_color=None,
         account_id="acc-1",
@@ -389,7 +407,10 @@ async def test_list_transactions_with_subtransactions(
 
     result = await mcp_client.call_tool("list_transactions", {})
 
-    response_data = json.loads(result[0].text)
+    response_data = (
+        json.loads(result[0].text) if isinstance(result[0], TextContent) else None
+    )
+    assert response_data is not None
     assert len(response_data["transactions"]) == 1
 
     txn = response_data["transactions"][0]
@@ -407,18 +428,18 @@ async def test_list_transactions_with_subtransactions(
 
 
 async def test_list_transactions_pagination(
-    transactions_api: MagicMock, mcp_client: Client
-):
+    transactions_api: MagicMock, mcp_client: Client[FastMCPTransport]
+) -> None:
     """Test transaction listing with pagination."""
     # Create many transactions to test pagination
     transactions = []
     for i in range(5):
         txn = ynab.TransactionDetail(
             id=f"txn-{i}",
-            var_date=date(2024, 1, i + 1),
+            date=date(2024, 1, i + 1),
             amount=-10000 * (i + 1),
             memo=f"Transaction {i}",
-            cleared="cleared",
+            cleared=ynab.TransactionClearedStatus.CLEARED,
             approved=True,
             flag_color=None,
             account_id="acc-1",
@@ -450,7 +471,10 @@ async def test_list_transactions_pagination(
     # Test first page
     result = await mcp_client.call_tool("list_transactions", {"limit": 2, "offset": 0})
 
-    response_data = json.loads(result[0].text)
+    response_data = (
+        json.loads(result[0].text) if isinstance(result[0], TextContent) else None
+    )
+    assert response_data is not None
     assert len(response_data["transactions"]) == 2
     assert response_data["pagination"]["total_count"] == 5
     assert response_data["pagination"]["has_more"] is True
@@ -464,7 +488,10 @@ async def test_list_transactions_pagination(
     # Test second page
     result = await mcp_client.call_tool("list_transactions", {"limit": 2, "offset": 2})
 
-    response_data = json.loads(result[0].text)
+    response_data = (
+        json.loads(result[0].text) if isinstance(result[0], TextContent) else None
+    )
+    assert response_data is not None
     assert len(response_data["transactions"]) == 2
     assert response_data["transactions"][0]["id"] == "txn-2"
     assert response_data["transactions"][1]["id"] == "txn-1"
@@ -472,17 +499,17 @@ async def test_list_transactions_pagination(
 
 async def test_list_transactions_with_category_filter(
     transactions_api: MagicMock,
-    mcp_client: Client,
+    mcp_client: Client[FastMCPTransport],
 ) -> None:
     """Test transaction listing filtered by category."""
 
     # Create transaction
     txn = ynab.TransactionDetail(
         id="txn-cat-1",
-        var_date=date(2024, 2, 1),
+        date=date(2024, 2, 1),
         amount=-40000,
         memo="Category filtered",
-        cleared="cleared",
+        cleared=ynab.TransactionClearedStatus.CLEARED,
         approved=True,
         flag_color=None,
         account_id="acc-1",
@@ -513,7 +540,10 @@ async def test_list_transactions_with_category_filter(
     )
 
     assert len(result) == 1
-    response_data = json.loads(result[0].text)
+    response_data = (
+        json.loads(result[0].text) if isinstance(result[0], TextContent) else None
+    )
+    assert response_data is not None
     assert len(response_data["transactions"]) == 1
     assert response_data["transactions"][0]["category_id"] == "cat-dining"
 
@@ -525,16 +555,16 @@ async def test_list_transactions_with_category_filter(
 
 async def test_list_transactions_with_payee_filter(
     transactions_api: MagicMock,
-    mcp_client: Client,
+    mcp_client: Client[FastMCPTransport],
 ) -> None:
     """Test transaction listing filtered by payee."""
     # Create transaction
     txn = ynab.TransactionDetail(
         id="txn-payee-1",
-        var_date=date(2024, 3, 1),
+        date=date(2024, 3, 1),
         amount=-80000,
         memo="Payee filtered",
-        cleared="cleared",
+        cleared=ynab.TransactionClearedStatus.CLEARED,
         approved=True,
         flag_color=None,
         account_id="acc-1",
@@ -565,7 +595,10 @@ async def test_list_transactions_with_payee_filter(
     )
 
     assert len(result) == 1
-    response_data = json.loads(result[0].text)
+    response_data = (
+        json.loads(result[0].text) if isinstance(result[0], TextContent) else None
+    )
+    assert response_data is not None
     assert len(response_data["transactions"]) == 1
     assert response_data["transactions"][0]["payee_id"] == "payee-amazon"
 

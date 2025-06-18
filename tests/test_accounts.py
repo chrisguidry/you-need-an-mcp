@@ -7,14 +7,15 @@ from datetime import datetime
 from unittest.mock import MagicMock
 
 import ynab
-from fastmcp import Client
+from fastmcp.client import Client, FastMCPTransport
+from mcp.types import TextContent
 
 
 async def test_list_accounts_success(
     mock_environment_variables: None,
     accounts_api: MagicMock,
-    mcp_client: Client,
-):
+    mcp_client: Client[FastMCPTransport],
+) -> None:
     """Test successful account listing."""
     open_account = ynab.Account(
         id="acc-1",
@@ -68,7 +69,10 @@ async def test_list_accounts_success(
     result = await mcp_client.call_tool("list_accounts", {})
 
     assert len(result) == 1
-    response_data = json.loads(result[0].text)
+    response_data = (
+        json.loads(result[0].text) if isinstance(result[0], TextContent) else None
+    )
+    assert response_data is not None
     # Should only include open account
     assert len(response_data["accounts"]) == 1
     assert response_data["accounts"][0]["id"] == "acc-1"
