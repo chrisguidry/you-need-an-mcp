@@ -4,13 +4,49 @@ Tests for transaction-related functionality in YNAB MCP Server.
 Tests the list_transactions tool with various filters and scenarios.
 """
 
-import json
 from datetime import date
+from typing import Any
 from unittest.mock import MagicMock
 
 import ynab
+from assertions import extract_response_data
 from fastmcp.client import Client, FastMCPTransport
-from mcp.types import TextContent
+
+
+def create_ynab_transaction(
+    *,
+    id: str = "txn-1",
+    date: date = date(2024, 1, 15),
+    amount: int = -50_000,  # -$50.00
+    account_id: str = "acc-1",
+    deleted: bool = False,
+    **kwargs: Any,
+) -> ynab.TransactionDetail:
+    """Create a YNAB TransactionDetail for testing with sensible defaults."""
+    return ynab.TransactionDetail(
+        id=id,
+        date=date,
+        amount=amount,
+        memo=kwargs.get("memo"),
+        cleared=kwargs.get("cleared", ynab.TransactionClearedStatus.CLEARED),
+        approved=kwargs.get("approved", True),
+        flag_color=kwargs.get("flag_color"),
+        account_id=account_id,
+        account_name=kwargs.get("account_name", "Test Account"),
+        payee_id=kwargs.get("payee_id"),
+        payee_name=kwargs.get("payee_name"),
+        category_id=kwargs.get("category_id"),
+        category_name=kwargs.get("category_name"),
+        transfer_account_id=kwargs.get("transfer_account_id"),
+        transfer_transaction_id=kwargs.get("transfer_transaction_id"),
+        matched_transaction_id=kwargs.get("matched_transaction_id"),
+        import_id=kwargs.get("import_id"),
+        import_payee_name=kwargs.get("import_payee_name"),
+        import_payee_name_original=kwargs.get("import_payee_name_original"),
+        debt_transaction_type=kwargs.get("debt_transaction_type"),
+        deleted=deleted,
+        subtransactions=kwargs.get("subtransactions", []),
+    )
 
 
 async def test_list_transactions_basic(
@@ -18,80 +54,44 @@ async def test_list_transactions_basic(
 ) -> None:
     """Test basic transaction listing without filters."""
 
-    txn1 = ynab.TransactionDetail(
+    txn1 = create_ynab_transaction(
         id="txn-1",
         date=date(2024, 1, 15),
-        amount=-50000,  # -$50.00 outflow
+        amount=-50_000,  # -$50.00 outflow
         memo="Grocery shopping",
-        cleared=ynab.TransactionClearedStatus.CLEARED,
-        approved=True,
         flag_color=ynab.TransactionFlagColor.RED,
-        account_id="acc-1",
         account_name="Checking",
         payee_id="payee-1",
         payee_name="Whole Foods",
         category_id="cat-1",
         category_name="Groceries",
-        transfer_account_id=None,
-        transfer_transaction_id=None,
-        matched_transaction_id=None,
-        import_id=None,
-        import_payee_name=None,
-        import_payee_name_original=None,
-        debt_transaction_type=None,
-        deleted=False,
-        subtransactions=[],
     )
 
-    txn2 = ynab.TransactionDetail(
+    txn2 = create_ynab_transaction(
         id="txn-2",
         date=date(2024, 1, 20),
-        amount=-75000,  # -$75.00 outflow
+        amount=-75_000,  # -$75.00 outflow
         memo="Dinner",
         cleared=ynab.TransactionClearedStatus.UNCLEARED,
-        approved=True,
-        flag_color=None,
-        account_id="acc-1",
         account_name="Checking",
         payee_id="payee-2",
         payee_name="Restaurant XYZ",
         category_id="cat-2",
         category_name="Dining Out",
-        transfer_account_id=None,
-        transfer_transaction_id=None,
-        matched_transaction_id=None,
-        import_id=None,
-        import_payee_name=None,
-        import_payee_name_original=None,
-        debt_transaction_type=None,
-        deleted=False,
-        subtransactions=[],
     )
 
     # Add a deleted transaction that should be filtered out
-    txn_deleted = ynab.TransactionDetail(
+    txn_deleted = create_ynab_transaction(
         id="txn-deleted",
         date=date(2024, 1, 10),
-        amount=-25000,
+        amount=-25_000,
         memo="Deleted transaction",
-        cleared=ynab.TransactionClearedStatus.CLEARED,
-        approved=True,
-        flag_color=None,
-        account_id="acc-1",
         account_name="Checking",
         payee_id="payee-3",
         payee_name="Store ABC",
         category_id="cat-1",
         category_name="Groceries",
-        transfer_account_id=None,
-        transfer_transaction_id=None,
-        matched_transaction_id=None,
-        import_id=None,
-        import_payee_name=None,
-        import_payee_name_original=None,
-        debt_transaction_type=None,
         deleted=True,  # Should be excluded
-        subtransactions=[],
     )
 
     transactions_response = ynab.TransactionsResponse(
@@ -106,9 +106,7 @@ async def test_list_transactions_basic(
     result = await mcp_client.call_tool("list_transactions", {})
 
     assert len(result) == 1
-    response_data = (
-        json.loads(result[0].text) if isinstance(result[0], TextContent) else None
-    )
+    response_data = extract_response_data(result)
     assert response_data is not None
 
     # Should have 2 transactions (deleted one excluded)
@@ -174,9 +172,7 @@ async def test_list_transactions_with_account_filter(
     )
 
     assert len(result) == 1
-    response_data = (
-        json.loads(result[0].text) if isinstance(result[0], TextContent) else None
-    )
+    response_data = extract_response_data(result)
     assert response_data is not None
     assert len(response_data["transactions"]) == 1
     assert response_data["transactions"][0]["account_id"] == "acc-checking"
@@ -284,9 +280,7 @@ async def test_list_transactions_with_amount_filters(
         },
     )
 
-    response_data = (
-        json.loads(result[0].text) if isinstance(result[0], TextContent) else None
-    )
+    response_data = extract_response_data(result)
     assert response_data is not None
     # Should only include small transaction (-$25 > -$50)
     assert len(response_data["transactions"]) == 1
@@ -300,9 +294,7 @@ async def test_list_transactions_with_amount_filters(
         },
     )
 
-    response_data = (
-        json.loads(result[0].text) if isinstance(result[0], TextContent) else None
-    )
+    response_data = extract_response_data(result)
     assert response_data is not None
     # Should only include large transaction (-$120 < -$100)
     assert len(response_data["transactions"]) == 1
@@ -317,9 +309,7 @@ async def test_list_transactions_with_amount_filters(
         },
     )
 
-    response_data = (
-        json.loads(result[0].text) if isinstance(result[0], TextContent) else None
-    )
+    response_data = extract_response_data(result)
     assert response_data is not None
     # Should only include medium transaction (-$60)
     assert len(response_data["transactions"]) == 1
@@ -407,9 +397,7 @@ async def test_list_transactions_with_subtransactions(
 
     result = await mcp_client.call_tool("list_transactions", {})
 
-    response_data = (
-        json.loads(result[0].text) if isinstance(result[0], TextContent) else None
-    )
+    response_data = extract_response_data(result)
     assert response_data is not None
     assert len(response_data["transactions"]) == 1
 
@@ -471,9 +459,7 @@ async def test_list_transactions_pagination(
     # Test first page
     result = await mcp_client.call_tool("list_transactions", {"limit": 2, "offset": 0})
 
-    response_data = (
-        json.loads(result[0].text) if isinstance(result[0], TextContent) else None
-    )
+    response_data = extract_response_data(result)
     assert response_data is not None
     assert len(response_data["transactions"]) == 2
     assert response_data["pagination"]["total_count"] == 5
@@ -488,9 +474,7 @@ async def test_list_transactions_pagination(
     # Test second page
     result = await mcp_client.call_tool("list_transactions", {"limit": 2, "offset": 2})
 
-    response_data = (
-        json.loads(result[0].text) if isinstance(result[0], TextContent) else None
-    )
+    response_data = extract_response_data(result)
     assert response_data is not None
     assert len(response_data["transactions"]) == 2
     assert response_data["transactions"][0]["id"] == "txn-2"
@@ -540,9 +524,7 @@ async def test_list_transactions_with_category_filter(
     )
 
     assert len(result) == 1
-    response_data = (
-        json.loads(result[0].text) if isinstance(result[0], TextContent) else None
-    )
+    response_data = extract_response_data(result)
     assert response_data is not None
     assert len(response_data["transactions"]) == 1
     assert response_data["transactions"][0]["category_id"] == "cat-dining"
@@ -595,9 +577,7 @@ async def test_list_transactions_with_payee_filter(
     )
 
     assert len(result) == 1
-    response_data = (
-        json.loads(result[0].text) if isinstance(result[0], TextContent) else None
-    )
+    response_data = extract_response_data(result)
     assert response_data is not None
     assert len(response_data["transactions"]) == 1
     assert response_data["transactions"][0]["payee_id"] == "payee-amazon"

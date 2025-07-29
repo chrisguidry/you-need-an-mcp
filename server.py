@@ -1,7 +1,7 @@
 import os
 from datetime import date, datetime
 from decimal import Decimal
-from typing import Literal
+from typing import Literal, cast
 
 import ynab
 from fastmcp import FastMCP
@@ -48,7 +48,7 @@ mcp = FastMCP[None](
 
 
 def get_ynab_client() -> ynab.ApiClient:
-    """Get authenticated YNAB client"""
+    """Get authenticated YNAB API client."""
     access_token = os.getenv("YNAB_ACCESS_TOKEN")
     if not access_token:
         raise ValueError("YNAB_ACCESS_TOKEN environment variable is required")
@@ -58,7 +58,7 @@ def get_ynab_client() -> ynab.ApiClient:
 
 
 def get_default_budget_id() -> str:
-    """Get default budget ID from environment variable or raise error"""
+    """Get default budget ID from environment variable."""
     budget_id = os.getenv("YNAB_DEFAULT_BUDGET")
     if not budget_id:
         raise ValueError(
@@ -68,10 +68,65 @@ def get_default_budget_id() -> str:
 
 
 def budget_id_or_default(budget_id: str | None) -> str:
-    """Return the provided budget_id or get the default budget ID if None"""
+    """Return provided budget_id or default if None."""
     if budget_id is None:
         return get_default_budget_id()
     return budget_id
+
+
+def _paginate_items[T](
+    items: list[T], limit: int, offset: int
+) -> tuple[list[T], PaginationInfo]:
+    """Apply pagination to a list of items and return the page with pagination info."""
+    total_count = len(items)
+    start_index = offset
+    end_index = min(offset + limit, total_count)
+    items_page = items[start_index:end_index]
+
+    has_more = end_index < total_count
+    next_offset = end_index if has_more else None
+
+    pagination = PaginationInfo(
+        total_count=total_count,
+        limit=limit,
+        offset=offset,
+        has_more=has_more,
+        next_offset=next_offset,
+        returned_count=len(items_page),
+    )
+
+    return items_page, pagination
+
+
+def _filter_active_items[T](
+    items: list[T],
+    *,
+    exclude_deleted: bool = True,
+    exclude_hidden: bool = False,
+    exclude_closed: bool = False,
+) -> list[T]:
+    """Filter items to exclude deleted/hidden/closed based on flags."""
+    filtered = []
+    for item in items:
+        if exclude_deleted and getattr(item, "deleted", False):
+            continue
+        if exclude_hidden and getattr(item, "hidden", False):
+            continue
+        if exclude_closed and getattr(item, "closed", False):
+            continue
+        filtered.append(item)
+    return filtered
+
+
+def _build_category_group_map(
+    category_groups: list[ynab.CategoryGroupWithCategories],
+) -> dict[str, str]:
+    """Build a mapping of category_id to category_group_name."""
+    mapping = {}
+    for category_group in category_groups:
+        for category in category_group.categories:
+            mapping[category.id] = category_group.name
+    return mapping
 
 
 def convert_month_to_date(
@@ -92,32 +147,26 @@ def convert_month_to_date(
     if isinstance(month, date):
         return month
 
-    # Get current date for calculations
     today = datetime.now().date()
-    current_year = today.year
-    current_month = today.month
+    year, month_num = today.year, today.month
 
-    if month == "current":
-        return date(current_year, current_month, 1)
-
-    elif month == "last":
-        # Previous month
-        if current_month == 1:
-            # January -> December of previous year
-            return date(current_year - 1, 12, 1)
-        else:
-            return date(current_year, current_month - 1, 1)
-
-    elif month == "next":
-        # Next month
-        if current_month == 12:
-            # December -> January of next year
-            return date(current_year + 1, 1, 1)
-        else:
-            return date(current_year, current_month + 1, 1)
-
-    # This shouldn't happen with proper typing, but just in case
-    raise ValueError(f"Invalid month value: {month}")
+    match month:
+        case "current":
+            return date(year, month_num, 1)
+        case "last":
+            return (
+                date(year - 1, 12, 1)
+                if month_num == 1
+                else date(year, month_num - 1, 1)
+            )
+        case "next":
+            return (
+                date(year + 1, 1, 1)
+                if month_num == 12
+                else date(year, month_num + 1, 1)
+            )
+        case _:
+            raise ValueError(f"Invalid month value: {month}")
 
 
 @mcp.tool()
@@ -141,9 +190,10 @@ def list_accounts(
     Only returns open/active accounts. Closed accounts are excluded automatically.
 
     Args:
-        limit: Maximum number of accounts to return (default 100)
-        offset: Number of accounts to skip (default 0)
-        budget_id: Budget ID (optional - omit to use default budget automatically)
+        limit: Maximum number of accounts to return per page (default: 100)
+        offset: Number of accounts to skip for pagination (default: 0)
+        budget_id: Unique identifier for the budget. If not provided, uses the default
+                  budget from YNAB_DEFAULT_BUDGET environment variable (optional)
 
     Returns:
         AccountsResponse with accounts list and pagination information
@@ -154,30 +204,12 @@ def list_accounts(
         accounts_api = ynab.AccountsApi(api_client)
         accounts_response = accounts_api.get_accounts(budget_id)
 
-        # Filter accounts - exclude closed accounts
-        all_accounts = [
-            Account.from_ynab(account)
-            for account in accounts_response.data.accounts
-            if not account.closed
-        ]
-
-        # Apply pagination
-        total_count = len(all_accounts)
-        start_index = offset
-        end_index = min(offset + limit, total_count)
-        accounts_page = all_accounts[start_index:end_index]
-
-        has_more = end_index < total_count
-        next_offset = end_index if has_more else None
-
-        pagination = PaginationInfo(
-            total_count=total_count,
-            limit=limit,
-            offset=offset,
-            has_more=has_more,
-            next_offset=next_offset,
-            returned_count=len(accounts_page),
+        active_accounts = _filter_active_items(
+            accounts_response.data.accounts, exclude_closed=True
         )
+        all_accounts = [Account.from_ynab(account) for account in active_accounts]
+
+        accounts_page, pagination = _paginate_items(all_accounts, limit, offset)
 
         return AccountsResponse(accounts=accounts_page, pagination=pagination)
 
@@ -194,9 +226,10 @@ def list_categories(
     automatically.
 
     Args:
-        limit: Maximum number of categories to return (default 50)
-        offset: Number of categories to skip (default 0)
-        budget_id: Budget ID (optional - omit to use default budget automatically)
+        limit: Maximum number of categories to return per page (default: 50)
+        offset: Number of categories to skip for pagination (default: 0)
+        budget_id: Unique identifier for the budget. If not provided, uses the default
+                  budget from YNAB_DEFAULT_BUDGET environment variable (optional)
 
     Returns:
         CategoriesResponse with categories list and pagination information
@@ -207,38 +240,17 @@ def list_categories(
         categories_api = ynab.CategoriesApi(api_client)
         categories_response = categories_api.get_categories(budget_id)
 
-        # First, collect all eligible categories - exclude hidden and deleted
         all_categories = []
         for category_group in categories_response.data.category_groups:
-            for category in category_group.categories:
-                # Skip hidden and deleted categories
-                if category.hidden or category.deleted:
-                    continue
-
+            active_categories = _filter_active_items(
+                category_group.categories, exclude_hidden=True
+            )
+            for category in active_categories:
                 all_categories.append(
                     Category.from_ynab(category, category_group.name).model_dump()
                 )
 
-        # Apply pagination
-        total_count = len(all_categories)
-        start_index = offset
-        end_index = min(offset + limit, total_count)
-        categories_page = all_categories[start_index:end_index]
-
-        has_more = end_index < total_count
-        next_offset = end_index if has_more else None
-
-        has_more = end_index < total_count
-        next_offset = end_index if has_more else None
-
-        pagination = PaginationInfo(
-            total_count=total_count,
-            limit=limit,
-            offset=offset,
-            has_more=has_more,
-            next_offset=next_offset,
-            returned_count=len(categories_page),
-        )
+        categories_page, pagination = _paginate_items(all_categories, limit, offset)
 
         # Convert dict categories back to Category objects
         category_objects = [Category(**cat_dict) for cat_dict in categories_page]
@@ -251,7 +263,8 @@ def list_category_groups(budget_id: str | None = None) -> CategoryGroupsResponse
     """List category groups for a specific budget (lighter weight than full categories).
 
     Args:
-        budget_id: Budget ID (optional - omit to use default budget automatically)
+        budget_id: Unique identifier for the budget. If not provided, uses the default
+                  budget from YNAB_DEFAULT_BUDGET environment variable (optional)
 
     Returns:
         CategoryGroupsResponse with category groups list
@@ -262,10 +275,9 @@ def list_category_groups(budget_id: str | None = None) -> CategoryGroupsResponse
         categories_api = ynab.CategoriesApi(api_client)
         categories_response = categories_api.get_categories(budget_id)
 
+        active_groups = _filter_active_items(categories_response.data.category_groups)
         groups = [
-            CategoryGroup.from_ynab(category_group)
-            for category_group in categories_response.data.category_groups
-            if not category_group.deleted
+            CategoryGroup.from_ynab(category_group) for category_group in active_groups
         ]
 
         return CategoryGroupsResponse(category_groups=groups)
@@ -285,12 +297,16 @@ def get_budget_month(
     automatically.
 
     Args:
-        month: Month specifier. Use "current" for current month, "last" for previous
-               month, "next" for next month, or a specific date object for an exact
-               month (default "current")
-        limit: Maximum number of categories to return (default 50)
-        offset: Number of categories to skip for pagination (default 0)
-        budget_id: Budget ID (optional - omit to use default budget automatically)
+        month: Specifies which budget month to retrieve:
+              • "current": Current calendar month
+              • "last": Previous calendar month
+              • "next": Next calendar month
+              • date object: Specific month (uses first day of month)
+              Examples: "current", date(2024, 3, 1) for March 2024 (default: "current")
+        limit: Maximum number of categories to return per page (default: 50)
+        offset: Number of categories to skip for pagination (default: 0)
+        budget_id: Unique identifier for the budget. If not provided, uses the default
+                  budget from YNAB_DEFAULT_BUDGET environment variable (optional)
 
     Returns:
         BudgetMonth with month info, categories, and pagination
@@ -302,45 +318,26 @@ def get_budget_month(
         converted_month = convert_month_to_date(month)
         month_response = months_api.get_budget_month(budget_id, converted_month)
 
-        # Also fetch category groups to get group names
+        # Fetch category groups for names
         categories_api = ynab.CategoriesApi(api_client)
         categories_response = categories_api.get_categories(budget_id)
 
-        # Build a mapping of category_id to group_name
-        category_group_map = {}
-        for category_group in categories_response.data.category_groups:
-            for category in category_group.categories:
-                category_group_map[category.id] = category_group.name
+        # Map category IDs to group names
+        category_group_map = _build_category_group_map(
+            categories_response.data.category_groups
+        )
 
         month_data = month_response.data.month
         all_categories = []
 
-        for category in month_data.categories:
-            # Skip hidden and deleted categories
-            if category.deleted or category.hidden:
-                continue
-
-            # Get the group name from our mapping
+        active_categories = _filter_active_items(
+            month_data.categories, exclude_hidden=True
+        )
+        for category in active_categories:
             group_name = category_group_map.get(category.id)
             all_categories.append(Category.from_ynab(category, group_name))
 
-        # Apply pagination
-        total_count = len(all_categories)
-        start_index = offset
-        end_index = min(offset + limit, total_count)
-        categories_page = all_categories[start_index:end_index]
-
-        has_more = end_index < total_count
-        next_offset = end_index if has_more else None
-
-        pagination = PaginationInfo(
-            total_count=total_count,
-            limit=limit,
-            offset=offset,
-            has_more=has_more,
-            next_offset=next_offset,
-            returned_count=len(categories_page),
-        )
+        categories_page, pagination = _paginate_items(all_categories, limit, offset)
 
         return BudgetMonth(
             month=month_data.month,
@@ -364,11 +361,15 @@ def get_month_category_by_id(
     """Get a specific category's data for a specific month.
 
     Args:
-        category_id: Category ID (required)
-        month: Month specifier. Use "current" for current month, "last" for previous
-               month, "next" for next month, or a specific date object for an exact
-               month (default "current")
-        budget_id: Budget ID (optional - omit to use default budget automatically)
+        category_id: Unique identifier for the category (required)
+        month: Specifies which budget month to retrieve:
+              • "current": Current calendar month
+              • "last": Previous calendar month
+              • "next": Next calendar month
+              • date object: Specific month (uses first day of month)
+              Examples: "current", date(2024, 3, 1) for March 2024 (default: "current")
+        budget_id: Unique identifier for the budget. If not provided, uses the default
+                  budget from YNAB_DEFAULT_BUDGET environment variable (optional)
 
     Returns:
         Category with budget data for the specified month
@@ -384,16 +385,12 @@ def get_month_category_by_id(
 
         category = category_response.data.category
 
-        # Fetch category groups to get the group name for this category
+        # Fetch category groups to get group name
         categories_response = categories_api.get_categories(budget_id)
-        group_name = None
-        for category_group in categories_response.data.category_groups:
-            for cat in category_group.categories:
-                if cat.id == category_id:
-                    group_name = category_group.name
-                    break
-            if group_name:
-                break
+        category_group_map = _build_category_group_map(
+            categories_response.data.category_groups
+        )
+        group_name = category_group_map.get(category_id)
 
         return Category.from_ynab(category, group_name)
 
@@ -420,23 +417,30 @@ def list_transactions(
     - Filter by amount range using min_amount and/or max_amount
 
     Example queries this tool can answer:
-    - "Show me all transactions over $50 in Dining Out this year" (use category_id,
-      min_amount, since_date)
-    - "How much have I spent at Amazon this month" (use payee_id, since_date)
-    - "List recent transactions in my checking account" (use account_id)
+    - "Show me all transactions over $50 in Dining Out this year"
+      → Use: category_id="cat_dining_out_id", min_amount=50.00,
+             since_date=date(2024, 1, 1)
+    - "How much have I spent at Amazon this month"
+      → Use: payee_id="payee_amazon_id", since_date=date(2024, 12, 1)
+    - "List recent transactions in my checking account"
+      → Use: account_id="acc_checking_id"
 
     Args:
         account_id: Filter by specific account (optional)
         category_id: Filter by specific category (optional)
         payee_id: Filter by specific payee (optional)
-        since_date: Only show transactions on or after this date (optional)
-        min_amount: Only show transactions with amount >= this value (optional,
-                    negative for outflows)
-        max_amount: Only show transactions with amount <= this value (optional,
-                    negative for outflows)
-        limit: Maximum number of transactions to return (default 25)
-        offset: Number of transactions to skip for pagination (default 0)
-        budget_id: Budget ID (optional - omit to use default budget automatically)
+        since_date: Only show transactions on or after this date. Accepts date objects
+                   in YYYY-MM-DD format (e.g., date(2024, 1, 1)) (optional)
+        min_amount: Only show transactions with amount >= this value in currency units.
+                   Use negative values for outflows/expenses
+                   (e.g., -50.00 for $50+ expenses) (optional)
+        max_amount: Only show transactions with amount <= this value in currency units.
+                   Use negative values for outflows/expenses
+                   (e.g., -10.00 for under $10 expenses) (optional)
+        limit: Maximum number of transactions to return per page (default: 25)
+        offset: Number of transactions to skip for pagination (default: 0)
+        budget_id: Unique identifier for the budget. If not provided, uses the default
+                  budget from YNAB_DEFAULT_BUDGET environment variable (optional)
 
     Returns:
         TransactionsResponse with filtered transactions and pagination info
@@ -472,42 +476,33 @@ def list_transactions(
                 budget_id, since_date=since_date, type=None
             )
 
-        # Convert and filter transactions
+        transactions_data: list[ynab.TransactionDetail | ynab.HybridTransaction] = cast(
+            list[ynab.TransactionDetail | ynab.HybridTransaction],
+            response.data.transactions,
+        )
+        active_transactions = _filter_active_items(transactions_data)
         all_transactions = []
-        for txn in response.data.transactions:
-            # Skip deleted transactions
-            if txn.deleted:
-                continue
-
+        for txn in active_transactions:
             # Apply amount filters (check milliunits directly for efficiency)
-            if min_amount is not None and txn.amount < (min_amount * 1000):
+            if (
+                min_amount is not None
+                and txn.amount is not None
+                and txn.amount < (min_amount * 1000)
+            ):
                 continue
-            if max_amount is not None and txn.amount > (max_amount * 1000):
+            if (
+                max_amount is not None
+                and txn.amount is not None
+                and txn.amount > (max_amount * 1000)
+            ):
                 continue
 
-            # Use class method to convert transaction
             all_transactions.append(Transaction.from_ynab(txn))
 
         # Sort by date descending (most recent first)
         all_transactions.sort(key=lambda t: t.date, reverse=True)
 
-        # Apply pagination
-        total_count = len(all_transactions)
-        start_index = offset
-        end_index = min(offset + limit, total_count)
-        transactions_page = all_transactions[start_index:end_index]
-
-        has_more = end_index < total_count
-        next_offset = end_index if has_more else None
-
-        pagination = PaginationInfo(
-            total_count=total_count,
-            limit=limit,
-            offset=offset,
-            has_more=has_more,
-            next_offset=next_offset,
-            returned_count=len(transactions_page),
-        )
+        transactions_page, pagination = _paginate_items(all_transactions, limit, offset)
 
         return TransactionsResponse(
             transactions=transactions_page, pagination=pagination
@@ -532,9 +527,10 @@ def list_payees(
     - "Show me all merchants I've paid"
 
     Args:
-        limit: Maximum number of payees to return (default 50)
-        offset: Number of payees to skip for pagination (default 0)
-        budget_id: Budget ID (optional - omit to use default budget automatically)
+        limit: Maximum number of payees to return per page (default: 50)
+        offset: Number of payees to skip for pagination (default: 0)
+        budget_id: Unique identifier for the budget. If not provided, uses the default
+                  budget from YNAB_DEFAULT_BUDGET environment variable (optional)
 
     Returns:
         PayeesResponse with payees list and pagination information
@@ -545,33 +541,13 @@ def list_payees(
         payees_api = ynab.PayeesApi(api_client)
         payees_response = payees_api.get_payees(budget_id)
 
-        # Filter payees - exclude deleted payees
-        all_payees = [
-            Payee.from_ynab(payee)
-            for payee in payees_response.data.payees
-            if not payee.deleted
-        ]
+        active_payees = _filter_active_items(payees_response.data.payees)
+        all_payees = [Payee.from_ynab(payee) for payee in active_payees]
 
         # Sort by name for easier browsing
         all_payees.sort(key=lambda p: p.name.lower())
 
-        # Apply pagination
-        total_count = len(all_payees)
-        start_index = offset
-        end_index = min(offset + limit, total_count)
-        payees_page = all_payees[start_index:end_index]
-
-        has_more = end_index < total_count
-        next_offset = end_index if has_more else None
-
-        pagination = PaginationInfo(
-            total_count=total_count,
-            limit=limit,
-            offset=offset,
-            has_more=has_more,
-            next_offset=next_offset,
-            returned_count=len(payees_page),
-        )
+        payees_page, pagination = _paginate_items(all_payees, limit, offset)
 
         return PayeesResponse(payees=payees_page, pagination=pagination)
 
@@ -595,9 +571,10 @@ def find_payee(
 
     Args:
         name_search: Search term to match against payee names (case-insensitive
-                     substring match)
-        limit: Maximum number of matching payees to return (default 10)
-        budget_id: Budget ID (optional - omit to use default budget automatically)
+                     substring match). Examples: "amazon", "starbucks", "grocery"
+        limit: Maximum number of matching payees to return (default: 10)
+        budget_id: Unique identifier for the budget. If not provided, uses the default
+                  budget from YNAB_DEFAULT_BUDGET environment variable (optional)
 
     Returns:
         PayeesResponse with matching payees and pagination information
@@ -608,12 +585,12 @@ def find_payee(
         payees_api = ynab.PayeesApi(api_client)
         payees_response = payees_api.get_payees(budget_id)
 
-        # Filter payees by name search and deleted status
+        active_payees = _filter_active_items(payees_response.data.payees)
         search_term = name_search.lower().strip()
         matching_payees = [
             Payee.from_ynab(payee)
-            for payee in payees_response.data.payees
-            if not payee.deleted and search_term in payee.name.lower()
+            for payee in active_payees
+            if search_term in payee.name.lower()
         ]
 
         # Sort by name for easier browsing
@@ -671,18 +648,24 @@ def list_scheduled_transactions(
         account_id: Filter by specific account (optional)
         category_id: Filter by specific category (optional)
         payee_id: Filter by specific payee (optional)
-        frequency: Filter by frequency (never, daily, weekly, everyOtherWeek,
-                   twiceAMonth, every4Weeks, monthly, everyOtherMonth, every3Months,
-                   every4Months, twiceAYear, yearly, everyOtherYear) (optional)
+        frequency: Filter by recurrence frequency. Valid values:
+                  • never, daily, weekly
+                  • everyOtherWeek, twiceAMonth, every4Weeks
+                  • monthly, everyOtherMonth, every3Months, every4Months
+                  • twiceAYear, yearly, everyOtherYear
+                  (optional)
         upcoming_days: Only show scheduled transactions with next occurrence
                        within this many days (optional)
         min_amount: Only show scheduled transactions with amount >= this value
-                    (optional, negative for outflows)
+                   in currency units. Use negative values for outflows/expenses
+                   (optional)
         max_amount: Only show scheduled transactions with amount <= this value
-                    (optional, negative for outflows)
-        limit: Maximum number of scheduled transactions to return (default 25)
-        offset: Number of scheduled transactions to skip for pagination (default 0)
-        budget_id: Budget ID (optional - omit to use default budget automatically)
+                   in currency units. Use negative values for outflows/expenses
+                   (optional)
+        limit: Maximum number of scheduled transactions to return per page (default: 25)
+        offset: Number of scheduled transactions to skip for pagination (default: 0)
+        budget_id: Unique identifier for the budget. If not provided, uses the default
+                  budget from YNAB_DEFAULT_BUDGET environment variable (optional)
 
     Returns:
         ScheduledTransactionsResponse with filtered scheduled transactions and
@@ -694,13 +677,11 @@ def list_scheduled_transactions(
         scheduled_transactions_api = ynab.ScheduledTransactionsApi(api_client)
         response = scheduled_transactions_api.get_scheduled_transactions(budget_id)
 
-        # Convert and filter scheduled transactions
+        active_scheduled_transactions = _filter_active_items(
+            response.data.scheduled_transactions
+        )
         all_scheduled_transactions = []
-        for st in response.data.scheduled_transactions:
-            # Skip deleted scheduled transactions
-            if st.deleted:
-                continue
-
+        for st in active_scheduled_transactions:
             # Apply filters
             if account_id and st.account_id != account_id:
                 continue
@@ -723,28 +704,13 @@ def list_scheduled_transactions(
             if max_amount is not None and st.amount > (max_amount * 1000):
                 continue
 
-            # Use class method to convert scheduled transaction
             all_scheduled_transactions.append(ScheduledTransaction.from_ynab(st))
 
         # Sort by next date ascending (earliest scheduled first)
         all_scheduled_transactions.sort(key=lambda st: st.date_next)
 
-        # Apply pagination
-        total_count = len(all_scheduled_transactions)
-        start_index = offset
-        end_index = min(offset + limit, total_count)
-        scheduled_transactions_page = all_scheduled_transactions[start_index:end_index]
-
-        has_more = end_index < total_count
-        next_offset = end_index if has_more else None
-
-        pagination = PaginationInfo(
-            total_count=total_count,
-            limit=limit,
-            offset=offset,
-            has_more=has_more,
-            next_offset=next_offset,
-            returned_count=len(scheduled_transactions_page),
+        scheduled_transactions_page, pagination = _paginate_items(
+            all_scheduled_transactions, limit, offset
         )
 
         return ScheduledTransactionsResponse(

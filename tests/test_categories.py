@@ -2,12 +2,53 @@
 Test category-related MCP tools.
 """
 
-import json
+from typing import Any
 from unittest.mock import MagicMock
 
 import ynab
+from assertions import assert_pagination_info, extract_response_data
 from fastmcp.client import Client, FastMCPTransport
-from mcp.types import TextContent
+
+
+def create_ynab_category(
+    *,
+    id: str = "cat-1",
+    name: str = "Test Category",
+    category_group_id: str = "group-1",
+    hidden: bool = False,
+    deleted: bool = False,
+    budgeted: int = 50_000,  # $50.00
+    activity: int = -30_000,  # -$30.00
+    balance: int = 20_000,  # $20.00
+    **kwargs: Any,
+) -> ynab.Category:
+    """Create a YNAB Category for testing with sensible defaults."""
+    return ynab.Category(
+        id=id,
+        category_group_id=category_group_id,
+        category_group_name=kwargs.get("category_group_name"),
+        name=name,
+        hidden=hidden,
+        original_category_group_id=kwargs.get("original_category_group_id"),
+        note=kwargs.get("note"),
+        budgeted=budgeted,
+        activity=activity,
+        balance=balance,
+        goal_type=kwargs.get("goal_type"),
+        goal_needs_whole_amount=kwargs.get("goal_needs_whole_amount"),
+        goal_day=kwargs.get("goal_day"),
+        goal_cadence=kwargs.get("goal_cadence"),
+        goal_cadence_frequency=kwargs.get("goal_cadence_frequency"),
+        goal_creation_month=kwargs.get("goal_creation_month"),
+        goal_target=kwargs.get("goal_target"),
+        goal_target_month=kwargs.get("goal_target_month"),
+        goal_percentage_complete=kwargs.get("goal_percentage_complete"),
+        goal_months_to_budget=kwargs.get("goal_months_to_budget"),
+        goal_under_funded=kwargs.get("goal_under_funded"),
+        goal_overall_funded=kwargs.get("goal_overall_funded"),
+        goal_overall_left=kwargs.get("goal_overall_left"),
+        deleted=deleted,
+    )
 
 
 async def test_list_categories_success(
@@ -16,58 +57,22 @@ async def test_list_categories_success(
     mcp_client: Client[FastMCPTransport],
 ) -> None:
     """Test successful category listing."""
-    visible_category = ynab.Category(
+    visible_category = create_ynab_category(
         id="cat-1",
-        category_group_id="group-1",
-        category_group_name="Monthly Bills",
         name="Groceries",
-        hidden=False,
-        original_category_group_id=None,
         note="Food shopping",
-        budgeted=50000,
-        activity=-30000,
-        balance=20000,
         goal_type="TB",
-        goal_needs_whole_amount=None,
-        goal_day=None,
-        goal_cadence=None,
-        goal_cadence_frequency=None,
-        goal_creation_month=None,
-        goal_target=100000,
-        goal_target_month=None,
+        goal_target=100_000,
         goal_percentage_complete=50,
-        goal_months_to_budget=None,
-        goal_under_funded=0,
-        goal_overall_funded=None,
-        goal_overall_left=None,
-        deleted=False,
     )
 
-    hidden_category = ynab.Category(
+    hidden_category = create_ynab_category(
         id="cat-hidden",
-        category_group_id="group-1",
-        category_group_name="Monthly Bills",
         name="Hidden Category",
-        hidden=True,  # Should be excluded by default
-        original_category_group_id=None,
-        note=None,
-        budgeted=10000,
+        hidden=True,  # Should be excluded
+        budgeted=10_000,
         activity=0,
-        balance=10000,
-        goal_type=None,
-        goal_needs_whole_amount=None,
-        goal_day=None,
-        goal_cadence=None,
-        goal_cadence_frequency=None,
-        goal_creation_month=None,
-        goal_target=None,
-        goal_target_month=None,
-        goal_percentage_complete=None,
-        goal_months_to_budget=None,
-        goal_under_funded=None,
-        goal_overall_funded=None,
-        goal_overall_left=None,
-        deleted=False,
+        balance=10_000,
     )
 
     category_group = ynab.CategoryGroupWithCategories(
@@ -83,21 +88,24 @@ async def test_list_categories_success(
             category_groups=[category_group], server_knowledge=0
         )
     )
-
     categories_api.get_categories.return_value = categories_response
 
     result = await mcp_client.call_tool("list_categories", {})
+    response_data = extract_response_data(result)
 
-    assert len(result) == 1
-    response_data = (
-        json.loads(result[0].text) if isinstance(result[0], TextContent) else None
-    )
-    assert response_data is not None
     # Should only include visible category
-    assert len(response_data["categories"]) == 1
-    assert response_data["categories"][0]["id"] == "cat-1"
-    assert response_data["categories"][0]["name"] == "Groceries"
-    assert response_data["categories"][0]["category_group_name"] == "Monthly Bills"
+    categories = response_data["categories"]
+    assert len(categories) == 1
+    assert categories[0]["id"] == "cat-1"
+    assert categories[0]["name"] == "Groceries"
+    assert categories[0]["category_group_name"] == "Monthly Bills"
+
+    assert_pagination_info(
+        response_data["pagination"],
+        total_count=1,
+        limit=50,
+        has_more=False,
+    )
 
 
 async def test_list_category_groups_success(
@@ -153,9 +161,7 @@ async def test_list_category_groups_success(
     result = await mcp_client.call_tool("list_category_groups", {})
 
     assert len(result) == 1
-    groups_data = (
-        json.loads(result[0].text) if isinstance(result[0], TextContent) else None
-    )
+    groups_data = extract_response_data(result)
     assert groups_data is not None
     # groups_data now contains category_groups list
     assert len(groups_data["category_groups"]) == 1
@@ -257,9 +263,7 @@ async def test_list_categories_filters_deleted_and_hidden(
     result = await mcp_client.call_tool("list_categories", {})
 
     assert len(result) == 1
-    response_data = (
-        json.loads(result[0].text) if isinstance(result[0], TextContent) else None
-    )
+    response_data = extract_response_data(result)
     assert response_data is not None
     # Should only include the active category
     assert len(response_data["categories"]) == 1
@@ -303,9 +307,7 @@ async def test_list_category_groups_filters_deleted(
     result = await mcp_client.call_tool("list_category_groups", {})
 
     assert len(result) == 1
-    response_data = (
-        json.loads(result[0].text) if isinstance(result[0], TextContent) else None
-    )
+    response_data = extract_response_data(result)
     assert response_data is not None
     # Should only include the active group in the category_groups list
     assert len(response_data["category_groups"]) == 1

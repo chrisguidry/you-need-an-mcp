@@ -6,6 +6,7 @@ to ensure correct filtering, pagination, and search behavior.
 """
 
 import json
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 import ynab
@@ -13,33 +14,42 @@ from fastmcp.client import Client, FastMCPTransport
 from mcp.types import TextContent
 
 
+def create_ynab_payee(
+    *,
+    id: str = "payee-1",
+    name: str = "Test Payee",
+    deleted: bool = False,
+    **kwargs: Any,
+) -> ynab.Payee:
+    """Create a YNAB Payee for testing with sensible defaults."""
+    return ynab.Payee(
+        id=id,
+        name=name,
+        transfer_account_id=kwargs.get("transfer_account_id"),
+        deleted=deleted,
+    )
+
+
 async def test_list_payees_success(
     payees_api: MagicMock, mcp_client: Client[FastMCPTransport]
 ) -> None:
     """Test successful payee listing."""
 
-    payee1 = ynab.Payee(
-        id="payee-1", name="Amazon", transfer_account_id=None, deleted=False
-    )
-
-    payee2 = ynab.Payee(
-        id="payee-2", name="Whole Foods", transfer_account_id=None, deleted=False
-    )
+    payee1 = create_ynab_payee(id="payee-1", name="Amazon")
+    payee2 = create_ynab_payee(id="payee-2", name="Whole Foods")
 
     # Deleted payee should be excluded by default
-    payee_deleted = ynab.Payee(
+    payee_deleted = create_ynab_payee(
         id="payee-deleted",
         name="Closed Store",
-        transfer_account_id=None,
         deleted=True,
     )
 
     # Transfer payee
-    payee_transfer = ynab.Payee(
+    payee_transfer = create_ynab_payee(
         id="payee-transfer",
         name="Transfer : Savings",
         transfer_account_id="acc-savings",
-        deleted=False,
     )
 
     payees_response = ynab.PayeesResponse(

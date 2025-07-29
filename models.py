@@ -15,15 +15,15 @@ from pydantic import BaseModel, Field
 
 
 def milliunits_to_currency(milliunits: int, decimal_digits: int = 2) -> Decimal:
-    """Convert YNAB milliunits to currency amount using Decimal for precision
+    """Convert YNAB milliunits to currency amount.
 
-    YNAB uses milliunits where 1000 milliunits = 1 currency unit
+    YNAB uses milliunits where 1000 milliunits = 1 currency unit.
     """
     return Decimal(milliunits) / Decimal("1000")
 
 
 class CurrencyFormat(BaseModel):
-    """YNAB currency formatting information for proper display of amounts."""
+    """Currency formatting information for display."""
 
     iso_code: str = Field(
         ..., description="ISO 4217 currency code (e.g., 'USD', 'EUR')"
@@ -44,7 +44,7 @@ class CurrencyFormat(BaseModel):
 
 
 class Budget(BaseModel):
-    """A YNAB budget with metadata and currency information."""
+    """A YNAB budget with metadata."""
 
     id: str = Field(..., description="Unique budget identifier")
     name: str = Field(..., description="User-defined budget name")
@@ -98,14 +98,15 @@ class PaginationInfo(BaseModel):
 class Account(BaseModel):
     """A YNAB account with balance information.
 
-    Note: All balance amounts are provided in currency units using Decimal for
-    precision.
+    All amounts are in currency units with Decimal precision.
     """
 
     id: str = Field(..., description="Unique account identifier")
     name: str = Field(..., description="User-defined account name")
     type: str = Field(
-        ..., description="Account type (e.g., 'checking', 'savings', 'creditCard')"
+        ...,
+        description="Account type. Common values: 'checking', 'savings', 'creditCard', "
+        "'cash', 'lineOfCredit', 'otherAsset', 'otherLiability'",
     )
     on_budget: bool = Field(
         ..., description="Whether this account is included in budget calculations"
@@ -141,12 +142,17 @@ class Account(BaseModel):
 class Category(BaseModel):
     """A YNAB category with budget and goal information.
 
-    Categories can have different goal types that affect how YNAB handles monthly
-    budgeting:
-    - 'NEED': Set aside specific amount each month
-    - 'TB': Target Balance - work toward a specific balance
-    - 'TBD': Target Balance by Date - reach balance by specific date
-    - 'MF': Monthly Funding - budget same amount each month
+    Categories organize your spending into logical groups (e.g., "Groceries", "Gas",
+    "Entertainment"). Each category can have money budgeted to it and shows activity
+    (spending) and remaining balance.
+
+    Goal Types:
+    • NEED: Set aside a specific amount each month toward a goal
+    • TB (Target Balance): Work toward maintaining a specific balance
+    • TBD (Target Balance by Date): Reach a target balance by a specific date
+    • MF (Monthly Funding): Fund with the same amount each month
+
+    All monetary amounts are in currency units (not YNAB's internal milliunits).
     """
 
     id: str = Field(..., description="Unique category identifier")
@@ -154,9 +160,7 @@ class Category(BaseModel):
     category_group_id: str = Field(
         ..., description="ID of the category group this category belongs to"
     )
-    category_group_name: str | None = Field(
-        None, description="Name of the category group (included in list_categories)"
-    )
+    category_group_name: str | None = Field(None, description="Category group name")
     note: str | None = Field(None, description="User-defined category notes")
     budgeted: Decimal | None = Field(
         None, description="Amount budgeted for this category in currency units"
@@ -169,7 +173,12 @@ class Category(BaseModel):
         None, description="Available balance (budgeted + activity)"
     )
     goal_type: str | None = Field(
-        None, description="Type of goal set for this category (NEED, TB, TBD, MF)"
+        None,
+        description="Type of goal set for this category:\n"
+        "• NEED: Set aside a specific amount each month\n"
+        "• TB: Target Balance - work toward a specific balance\n"
+        "• TBD: Target Balance by Date - reach balance by specific date\n"
+        "• MF: Monthly Funding - fund with same amount each month",
     )
     goal_target: Decimal | None = Field(
         None, description="Target amount for the goal in currency units"
@@ -220,9 +229,8 @@ class Category(BaseModel):
 class CategoryGroup(BaseModel):
     """A YNAB category group with summary totals.
 
-    Category groups organize related categories together (e.g., 'Monthly Bills',
-    'Everyday Expenses').
-    The totals include all non-deleted categories within the group.
+    Groups organize related categories (e.g., 'Monthly Bills', 'Everyday Expenses').
+    Totals include all active categories in the group.
     """
 
     id: str = Field(..., description="Unique category group identifier")
@@ -276,9 +284,7 @@ class CategoryGroup(BaseModel):
 class BudgetMonth(BaseModel):
     """Monthly budget summary with category details.
 
-    Provides complete monthly budget information including income, total budgeted
-    amounts,
-    spending activity, and detailed category breakdowns.
+    Includes income, budgeted amounts, spending activity, and category breakdowns.
     """
 
     month: datetime.date | None = Field(None, description="Budget month date")
@@ -302,38 +308,36 @@ class BudgetMonth(BaseModel):
         description="Age of money in days (how long money sits before being spent)",
     )
     categories: list[Category] = Field(
-        ..., description="List of categories with their monthly budget data"
+        ..., description="Categories with monthly budget data"
     )
     pagination: PaginationInfo | None = Field(
-        None, description="Pagination information for category list"
+        None, description="Pagination information"
     )
 
 
 # Response models for MCP tools
 class BudgetsResponse(BaseModel):
-    """Response model for list_budgets tool."""
+    """Response for list_budgets tool."""
 
     budgets: list[Budget] = Field(..., description="List of available YNAB budgets")
 
 
 class AccountsResponse(BaseModel):
-    """Response model for list_accounts tool."""
+    """Response for list_accounts tool."""
 
     accounts: list[Account] = Field(..., description="List of accounts in the budget")
     pagination: PaginationInfo = Field(..., description="Pagination information")
 
 
 class CategoriesResponse(BaseModel):
-    """Response model for list_categories tool (structure only, no budget amounts)."""
+    """Response for list_categories tool."""
 
-    categories: list[Category] = Field(
-        ..., description="List of category structures (no budget amounts)"
-    )
+    categories: list[Category] = Field(..., description="List of categories")
     pagination: PaginationInfo = Field(..., description="Pagination information")
 
 
 class CategoryGroupsResponse(BaseModel):
-    """Response model for list_category_groups tool."""
+    """Response for list_category_groups tool."""
 
     category_groups: list[CategoryGroup] = Field(
         ..., description="List of category groups with totals"
@@ -346,7 +350,9 @@ class BaseTransaction(BaseModel):
     id: str = Field(..., description="Unique identifier")
     amount: Decimal | None = Field(
         None,
-        description="Amount in currency units (negative = outflow, positive = inflow)",
+        description="Transaction amount in currency units. Negative values represent "
+        "outflows (spending/expenses), positive values represent inflows "
+        "(income/deposits)",
     )
     memo: str | None = Field(None, description="User-entered memo/notes")
     flag_color: str | None = Field(
@@ -355,19 +361,13 @@ class BaseTransaction(BaseModel):
         "or null",
     )
     account_id: str = Field(..., description="Account ID where transaction occurs")
-    account_name: str | None = Field(
-        None, description="Account name (included when listing)"
-    )
+    account_name: str | None = Field(None, description="Account name")
     payee_id: str | None = Field(None, description="Payee ID (who transaction is with)")
-    payee_name: str | None = Field(
-        None, description="Payee name (included when listing)"
-    )
+    payee_name: str | None = Field(None, description="Payee name")
     category_id: str | None = Field(
         None, description="Category ID (null for transfers or uncategorized)"
     )
-    category_name: str | None = Field(
-        None, description="Category name (included when listing)"
-    )
+    category_name: str | None = Field(None, description="Category name")
     transfer_account_id: str | None = Field(
         None, description="If a transfer, the account ID of the other side"
     )
@@ -572,7 +572,7 @@ class ScheduledTransaction(BaseTransaction):
 
 
 class TransactionsResponse(BaseModel):
-    """Response model for list_transactions tool."""
+    """Response for list_transactions tool."""
 
     transactions: list[Transaction] = Field(
         ..., description="List of transactions matching filters"
@@ -583,9 +583,10 @@ class TransactionsResponse(BaseModel):
 class Payee(BaseModel):
     """A YNAB payee (person, company, or entity that receives payments).
 
-    Payees can be manually created or automatically created when transactions are
-    imported.
-    Transfer payees are special system-generated payees for account transfers.
+    YNAB uses 'payees' to represent who you pay money to (merchants, people,
+    companies, etc.). Payees can be manually created or automatically created
+    when transactions are imported. Transfer payees are special system-generated
+    payees for account transfers.
     """
 
     id: str = Field(..., description="Unique payee identifier")
@@ -605,14 +606,14 @@ class Payee(BaseModel):
 
 
 class PayeesResponse(BaseModel):
-    """Response model for list_payees tool."""
+    """Response for list_payees tool."""
 
     payees: list[Payee] = Field(..., description="List of payees in the budget")
     pagination: PaginationInfo = Field(..., description="Pagination information")
 
 
 class ScheduledTransactionsResponse(BaseModel):
-    """Response model for list_scheduled_transactions tool."""
+    """Response for list_scheduled_transactions tool."""
 
     scheduled_transactions: list[ScheduledTransaction] = Field(
         ..., description="List of scheduled transactions matching filters"
