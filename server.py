@@ -35,6 +35,10 @@ mcp = FastMCP[None](
     they are probably talking about their default/only budget.  When the user asks about
     budget categories and "how much is left", they are talking about the current month.
 
+    Budget categories are grouped into category groups, which are important groupings
+    to the user and should be displayed in a hierarchical manner.  Categories will have
+    the category_group_name and category_group_id available.
+
     IMPORTANT: For any tool that accepts a budget_id parameter, if the user is asking
     about their data in general (not a specific budget), you can omit the budget_id
     parameter entirely. Do NOT call list_budgets first - just call the tool without
@@ -347,10 +351,6 @@ def get_budget_month(
             to_be_budgeted=milliunits_to_currency(month_data.to_be_budgeted),
             age_of_money=month_data.age_of_money,
             categories=categories_page,
-            income_milliunits=month_data.income,
-            budgeted_milliunits=month_data.budgeted,
-            activity_milliunits=month_data.activity,
-            to_be_budgeted_milliunits=month_data.to_be_budgeted,
             pagination=pagination,
         )
 

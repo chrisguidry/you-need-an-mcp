@@ -912,5 +912,4 @@ async def test_list_scheduled_transactions_with_deleted_subtransactions(
     # Should only have the active subtransaction (deleted one excluded)
     assert len(st["subtransactions"]) == 1
     assert st["subtransactions"][0]["id"] == "sub-active"
-    assert st["subtransactions"][0]["deleted"] is False
     assert st["subtransactions"][0]["category_name"] == "Active Category"

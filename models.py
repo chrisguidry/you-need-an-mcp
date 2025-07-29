@@ -31,22 +31,7 @@ class CurrencyFormat(BaseModel):
     example_format: str = Field(
         ..., description="Example of how currency should be formatted (e.g., '$123.45')"
     )
-    decimal_digits: int = Field(
-        ..., description="Number of decimal places for this currency"
-    )
-    decimal_separator: str = Field(
-        ..., description="Character used for decimal separation (e.g., '.')"
-    )
-    symbol_first: bool = Field(
-        ..., description="Whether currency symbol appears before the amount"
-    )
-    group_separator: str = Field(
-        ..., description="Character used for thousands separation (e.g., ',')"
-    )
     currency_symbol: str = Field(..., description="Currency symbol (e.g., '$', '€')")
-    display_symbol: bool = Field(
-        ..., description="Whether to display the currency symbol"
-    )
 
     @classmethod
     def from_ynab(cls, currency_format: ynab.CurrencyFormat) -> CurrencyFormat:
@@ -54,12 +39,7 @@ class CurrencyFormat(BaseModel):
         return cls(
             iso_code=currency_format.iso_code,
             example_format=currency_format.example_format,
-            decimal_digits=currency_format.decimal_digits,
-            decimal_separator=currency_format.decimal_separator,
-            symbol_first=currency_format.symbol_first,
-            group_separator=currency_format.group_separator,
             currency_symbol=currency_format.currency_symbol,
-            display_symbol=currency_format.display_symbol,
         )
 
 
@@ -118,9 +98,8 @@ class PaginationInfo(BaseModel):
 class Account(BaseModel):
     """A YNAB account with balance information.
 
-    Note: All balance amounts are provided in both milliunits (YNAB's internal format
-    where 1000 milliunits = 1 currency unit) and converted currency amounts using
-    Decimal for precision.
+    Note: All balance amounts are provided in currency units using Decimal for
+    precision.
     """
 
     id: str = Field(..., description="Unique account identifier")
@@ -139,24 +118,6 @@ class Account(BaseModel):
     cleared_balance: Decimal | None = Field(
         None, description="Balance of cleared transactions in currency units"
     )
-    uncleared_balance: Decimal | None = Field(
-        None, description="Balance of uncleared transactions in currency units"
-    )
-    transfer_payee_id: str | None = Field(
-        None, description="ID of the payee used for transfers to this account"
-    )
-    direct_import_linked: bool | None = Field(
-        None, description="Whether account is linked for direct import"
-    )
-    direct_import_in_error: bool | None = Field(
-        None, description="Whether direct import is currently in error state"
-    )
-    last_reconciled_at: datetime.datetime | None = Field(
-        None, description="Timestamp of last reconciliation (UTC)"
-    )
-    debt_original_balance: Decimal | None = Field(
-        None, description="Original balance for debt accounts in currency units"
-    )
 
     @classmethod
     def from_ynab(cls, account: ynab.Account) -> Account:
@@ -173,16 +134,6 @@ class Account(BaseModel):
             else None,
             cleared_balance=milliunits_to_currency(account.cleared_balance)
             if account.cleared_balance is not None
-            else None,
-            uncleared_balance=milliunits_to_currency(account.uncleared_balance)
-            if account.uncleared_balance is not None
-            else None,
-            transfer_payee_id=account.transfer_payee_id,
-            direct_import_linked=account.direct_import_linked,
-            direct_import_in_error=account.direct_import_in_error,
-            last_reconciled_at=account.last_reconciled_at,
-            debt_original_balance=milliunits_to_currency(account.debt_original_balance)
-            if account.debt_original_balance is not None
             else None,
         )
 
@@ -205,9 +156,6 @@ class Category(BaseModel):
     )
     category_group_name: str | None = Field(
         None, description="Name of the category group (included in list_categories)"
-    )
-    hidden: bool = Field(
-        ..., description="Whether this category is hidden from normal budget view"
     )
     note: str | None = Field(None, description="User-defined category notes")
     budgeted: Decimal | None = Field(
@@ -232,16 +180,6 @@ class Category(BaseModel):
     goal_under_funded: Decimal | None = Field(
         None, description="Amount still needed to meet goal in currency units"
     )
-    budgeted_milliunits: int | None = Field(
-        None,
-        description="Raw budgeted amount in YNAB milliunits (1000 = 1 currency unit)",
-    )
-    activity_milliunits: int | None = Field(
-        None, description="Raw activity amount in YNAB milliunits"
-    )
-    balance_milliunits: int | None = Field(
-        None, description="Raw balance amount in YNAB milliunits"
-    )
 
     @classmethod
     def from_ynab(
@@ -258,7 +196,6 @@ class Category(BaseModel):
             name=category.name,
             category_group_id=category.category_group_id,
             category_group_name=category_group_name,
-            hidden=category.hidden,
             note=category.note,
             budgeted=milliunits_to_currency(category.budgeted)
             if category.budgeted is not None
@@ -277,9 +214,6 @@ class Category(BaseModel):
             goal_under_funded=milliunits_to_currency(category.goal_under_funded)
             if category.goal_under_funded is not None
             else None,
-            budgeted_milliunits=category.budgeted,
-            activity_milliunits=category.activity,
-            balance_milliunits=category.balance,
         )
 
 
@@ -370,18 +304,6 @@ class BudgetMonth(BaseModel):
     categories: list[Category] = Field(
         ..., description="List of categories with their monthly budget data"
     )
-    income_milliunits: int | None = Field(
-        None, description="Raw income amount in YNAB milliunits"
-    )
-    budgeted_milliunits: int | None = Field(
-        None, description="Raw budgeted amount in YNAB milliunits"
-    )
-    activity_milliunits: int | None = Field(
-        None, description="Raw activity amount in YNAB milliunits"
-    )
-    to_be_budgeted_milliunits: int | None = Field(
-        None, description="Raw to-be-budgeted amount in YNAB milliunits"
-    )
     pagination: PaginationInfo | None = Field(
         None, description="Pagination information for category list"
     )
@@ -449,10 +371,6 @@ class BaseTransaction(BaseModel):
     transfer_account_id: str | None = Field(
         None, description="If a transfer, the account ID of the other side"
     )
-    deleted: bool = Field(..., description="Whether this has been deleted")
-    amount_milliunits: int | None = Field(
-        None, description="Raw amount in YNAB milliunits (1000 = 1 currency unit)"
-    )
 
 
 class Subtransaction(BaseModel):
@@ -463,7 +381,6 @@ class Subtransaction(BaseModel):
     """
 
     id: str = Field(..., description="Unique subtransaction identifier")
-    transaction_id: str = Field(..., description="Parent transaction ID")
     amount: Decimal | None = Field(
         None, description="Subtransaction amount in currency units"
     )
@@ -477,13 +394,6 @@ class Subtransaction(BaseModel):
     transfer_account_id: str | None = Field(
         None, description="If a transfer, the account ID"
     )
-    transfer_transaction_id: str | None = Field(
-        None, description="If a transfer, the transaction ID"
-    )
-    deleted: bool = Field(..., description="Whether subtransaction has been deleted")
-    amount_milliunits: int | None = Field(
-        None, description="Raw amount in YNAB milliunits"
-    )
 
 
 class ScheduledSubtransaction(BaseModel):
@@ -493,9 +403,6 @@ class ScheduledSubtransaction(BaseModel):
     """
 
     id: str = Field(..., description="Unique scheduled subtransaction identifier")
-    scheduled_transaction_id: str = Field(
-        ..., description="Parent scheduled transaction ID"
-    )
     amount: Decimal | None = Field(
         None, description="Scheduled subtransaction amount in currency units"
     )
@@ -508,12 +415,6 @@ class ScheduledSubtransaction(BaseModel):
     category_name: str | None = Field(None, description="Category name")
     transfer_account_id: str | None = Field(
         None, description="If a transfer, the account ID"
-    )
-    deleted: bool = Field(
-        ..., description="Whether scheduled subtransaction has been deleted"
-    )
-    amount_milliunits: int | None = Field(
-        None, description="Raw amount in YNAB milliunits"
     )
 
 
@@ -535,25 +436,6 @@ class Transaction(BaseTransaction):
         ...,
         description="Whether transaction is approved (false if imported and "
         "awaiting approval)",
-    )
-    transfer_transaction_id: str | None = Field(
-        None, description="If a transfer, the transaction ID of the other side"
-    )
-    matched_transaction_id: str | None = Field(
-        None, description="If matched to another transaction during import"
-    )
-    import_id: str | None = Field(
-        None, description="Import ID for deduplication during imports"
-    )
-    import_payee_name: str | None = Field(
-        None, description="Original payee name from import before mapping"
-    )
-    import_payee_name_original: str | None = Field(
-        None, description="Original payee name before any YNAB modifications"
-    )
-    debt_transaction_type: str | None = Field(
-        None,
-        description="For debt accounts: 'payment', 'refund', 'fee', 'interest', etc.",
     )
 
     # Subtransactions for split transactions
@@ -582,7 +464,6 @@ class Transaction(BaseTransaction):
                     subtransactions.append(
                         Subtransaction(
                             id=sub.id,
-                            transaction_id=sub.transaction_id,
                             amount=milliunits_to_currency(sub.amount),
                             memo=sub.memo,
                             payee_id=sub.payee_id,
@@ -590,9 +471,6 @@ class Transaction(BaseTransaction):
                             category_id=sub.category_id,
                             category_name=sub.category_name,
                             transfer_account_id=sub.transfer_account_id,
-                            transfer_transaction_id=sub.transfer_transaction_id,
-                            deleted=sub.deleted,
-                            amount_milliunits=sub.amount,
                         )
                     )
 
@@ -611,14 +489,6 @@ class Transaction(BaseTransaction):
             category_id=txn.category_id,
             category_name=getattr(txn, "category_name", None),
             transfer_account_id=txn.transfer_account_id,
-            transfer_transaction_id=txn.transfer_transaction_id,
-            matched_transaction_id=txn.matched_transaction_id,
-            import_id=txn.import_id,
-            import_payee_name=txn.import_payee_name,
-            import_payee_name_original=txn.import_payee_name_original,
-            debt_transaction_type=txn.debt_transaction_type,
-            deleted=txn.deleted,
-            amount_milliunits=txn.amount,
             subtransactions=subtransactions,
         )
 
@@ -671,7 +541,6 @@ class ScheduledTransaction(BaseTransaction):
                     subtransactions.append(
                         ScheduledSubtransaction(
                             id=sub.id,
-                            scheduled_transaction_id=sub.scheduled_transaction_id,
                             amount=milliunits_to_currency(sub.amount),
                             memo=sub.memo,
                             payee_id=sub.payee_id,
@@ -679,8 +548,6 @@ class ScheduledTransaction(BaseTransaction):
                             category_id=sub.category_id,
                             category_name=sub.category_name,
                             transfer_account_id=sub.transfer_account_id,
-                            deleted=sub.deleted,
-                            amount_milliunits=sub.amount,
                         )
                     )
 
@@ -700,8 +567,6 @@ class ScheduledTransaction(BaseTransaction):
             category_id=st.category_id,
             category_name=getattr(st, "category_name", None),
             transfer_account_id=st.transfer_account_id,
-            deleted=st.deleted,
-            amount_milliunits=st.amount,
             subtransactions=subtransactions,
         )
 
@@ -728,7 +593,6 @@ class Payee(BaseModel):
     transfer_account_id: str | None = Field(
         None, description="If this is a transfer payee, the associated account ID"
     )
-    deleted: bool = Field(..., description="Whether payee has been deleted")
 
     @classmethod
     def from_ynab(cls, payee: ynab.Payee) -> Payee:
@@ -737,7 +601,6 @@ class Payee(BaseModel):
             id=payee.id,
             name=payee.name,
             transfer_account_id=payee.transfer_account_id,
-            deleted=payee.deleted,
         )
 
 
