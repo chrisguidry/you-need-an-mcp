@@ -97,6 +97,7 @@ async def test_list_categories_success(
     assert len(response_data["categories"]) == 1
     assert response_data["categories"][0]["id"] == "cat-1"
     assert response_data["categories"][0]["name"] == "Groceries"
+    assert response_data["categories"][0]["category_group_name"] == "Monthly Bills"
 
 
 async def test_list_category_groups_success(

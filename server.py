@@ -298,6 +298,16 @@ def get_budget_month(
         converted_month = convert_month_to_date(month)
         month_response = months_api.get_budget_month(budget_id, converted_month)
 
+        # Also fetch category groups to get group names
+        categories_api = ynab.CategoriesApi(api_client)
+        categories_response = categories_api.get_categories(budget_id)
+
+        # Build a mapping of category_id to group_name
+        category_group_map = {}
+        for category_group in categories_response.data.category_groups:
+            for category in category_group.categories:
+                category_group_map[category.id] = category_group.name
+
         month_data = month_response.data.month
         all_categories = []
 
@@ -306,7 +316,9 @@ def get_budget_month(
             if category.deleted or category.hidden:
                 continue
 
-            all_categories.append(Category.from_ynab(category))
+            # Get the group name from our mapping
+            group_name = category_group_map.get(category.id)
+            all_categories.append(Category.from_ynab(category, group_name))
 
         # Apply pagination
         total_count = len(all_categories)
@@ -372,7 +384,18 @@ def get_month_category_by_id(
 
         category = category_response.data.category
 
-        return Category.from_ynab(category)
+        # Fetch category groups to get the group name for this category
+        categories_response = categories_api.get_categories(budget_id)
+        group_name = None
+        for category_group in categories_response.data.category_groups:
+            for cat in category_group.categories:
+                if cat.id == category_id:
+                    group_name = category_group.name
+                    break
+            if group_name:
+                break
+
+        return Category.from_ynab(category, group_name)
 
 
 @mcp.tool()
