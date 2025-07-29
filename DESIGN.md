@@ -182,6 +182,48 @@ Each use case follows this structure for clarity:
 - `create_budget_scenario()` - Clone budget for what-if analysis
 - `get_category_spending_history()` - Trends over time for better projections
 
+### 9. AI-Assisted Payee Cleanup
+**User says**: "Help me clean up my payees" or "Find duplicate payees and suggest how to merge them" or "Which payees should be renamed for consistency?"
+
+**Why it matters**: YNAB imports create messy payee lists with variations like "AMZN MKTP US*M123", "Amazon.com", "AMAZON PRIME". Manual cleanup in YNAB's UI is tedious and time-consuming. Parents need consistent payee names for accurate spending analysis and budget reports.
+
+**MCP Server Role**:
+- `list_payees()` - Get all payees with transaction counts
+- `list_transactions()` - Analyze transaction patterns per payee
+- Returns payee names, IDs, and usage statistics
+
+**LLM Role**:
+- Pattern recognition to identify similar payees (fuzzy matching)
+- Groups variations of the same merchant (e.g., "Amazon", "AMZN", "Amazon Prime")
+- Suggests canonical names based on clarity and frequency
+- Identifies rarely-used payees that could be merged
+- Prioritizes high-impact cleanups (most transactions affected)
+- Generates step-by-step cleanup instructions for YNAB UI
+
+**Example Implementation Flow**:
+1. Call `list_payees()` to get all payees with pagination
+2. Use NLP/fuzzy matching to identify potential duplicate groups
+3. For each group, analyze transaction patterns to confirm similarity
+4. Suggest a canonical name (prefer clear, human-readable versions)
+5. Calculate impact (number of transactions that would be affected)
+6. Present recommendations ranked by impact with manual cleanup steps
+
+**Edge Cases**:
+- Transfer payees (contain account names) need special handling
+- Starting Balance and Manual Balance Adjustment are system payees
+- Credit card payment payees follow specific patterns
+- Venmo/PayPal transactions may need memo analysis for better grouping
+- Consider frequency of use when suggesting merge direction
+
+**SDK Limitations (as of 2025-06)**:
+- ❌ No payee merging/combining operations in YNAB API
+- ❌ No payee deletion capability
+- ❌ No bulk payee operations
+- ✅ Only individual payee renaming supported via `update_payee()`
+
+**Current Implementation Approach**:
+This use case is **advisory only** due to API limitations. The MCP server can identify duplicate patterns and suggest cleanup strategies, but users must manually execute merges in YNAB's web interface. A future `rename_payee()` tool could automate the renaming step after manual merging.
+
 ## Design Principles for Use Cases
 
 1. **Conversational First**: Every query should feel natural to speak or type
