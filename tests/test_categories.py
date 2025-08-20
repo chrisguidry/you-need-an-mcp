@@ -163,9 +163,8 @@ async def test_list_category_groups_success(
     assert len(result) == 1
     groups_data = extract_response_data(result)
     assert groups_data is not None
-    # groups_data now contains category_groups list
-    assert len(groups_data["category_groups"]) == 1
-    group = groups_data["category_groups"][0]
+    # For a single category group, groups_data is the group itself
+    group = groups_data
     assert group["id"] == "group-1"
     assert group["name"] == "Monthly Bills"
 
@@ -309,8 +308,7 @@ async def test_list_category_groups_filters_deleted(
     assert len(result) == 1
     response_data = extract_response_data(result)
     assert response_data is not None
-    # Should only include the active group in the category_groups list
-    assert len(response_data["category_groups"]) == 1
-    group = response_data["category_groups"][0]
+    # Should only include the active group - single object
+    group = response_data
     assert group["id"] == "group-active"
     assert group["name"] == "Active Group"

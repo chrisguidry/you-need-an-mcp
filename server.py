@@ -14,7 +14,6 @@ from models import (
     CategoriesResponse,
     Category,
     CategoryGroup,
-    CategoryGroupsResponse,
     PaginationInfo,
     Payee,
     PayeesResponse,
@@ -84,15 +83,12 @@ def _paginate_items[T](
     items_page = items[start_index:end_index]
 
     has_more = end_index < total_count
-    next_offset = end_index if has_more else None
 
     pagination = PaginationInfo(
         total_count=total_count,
         limit=limit,
         offset=offset,
         has_more=has_more,
-        next_offset=next_offset,
-        returned_count=len(items_page),
     )
 
     return items_page, pagination
@@ -171,7 +167,7 @@ def convert_month_to_date(
 
 @mcp.tool()
 def list_budgets() -> list[Budget]:
-    """List all budgets from YNAB with metadata and currency formatting information."""
+    """List all budgets from YNAB with metadata."""
     with get_ynab_client() as api_client:
         budgets_api = ynab.BudgetsApi(api_client)
         budgets_response = budgets_api.get_budgets()
@@ -259,7 +255,7 @@ def list_categories(
 
 
 @mcp.tool()
-def list_category_groups(budget_id: str | None = None) -> CategoryGroupsResponse:
+def list_category_groups(budget_id: str | None = None) -> list[CategoryGroup]:
     """List category groups for a specific budget (lighter weight than full categories).
 
     Args:
@@ -267,7 +263,7 @@ def list_category_groups(budget_id: str | None = None) -> CategoryGroupsResponse
                   budget from YNAB_DEFAULT_BUDGET environment variable (optional)
 
     Returns:
-        CategoryGroupsResponse with category groups list
+        List of category groups
     """
     budget_id = budget_id_or_default(budget_id)
 
@@ -280,7 +276,7 @@ def list_category_groups(budget_id: str | None = None) -> CategoryGroupsResponse
             CategoryGroup.from_ynab(category_group) for category_group in active_groups
         ]
 
-        return CategoryGroupsResponse(category_groups=groups)
+        return groups
 
 
 @mcp.tool()
@@ -608,8 +604,6 @@ def find_payee(
             limit=limit,
             offset=0,
             has_more=has_more,
-            next_offset=None,  # Search doesn't support offset-based pagination
-            returned_count=len(limited_payees),
         )
 
         return PayeesResponse(payees=limited_payees, pagination=pagination)

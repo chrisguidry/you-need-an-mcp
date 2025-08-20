@@ -117,13 +117,11 @@ async def test_list_scheduled_transactions_basic(
     assert response_data["scheduled_transactions"][1]["date_next"] == "2024-02-01"
     assert response_data["scheduled_transactions"][1]["frequency"] == "monthly"
     assert response_data["scheduled_transactions"][1]["amount"] == "-120"
-    assert response_data["scheduled_transactions"][1]["flag_color"] == "red"
-    assert response_data["scheduled_transactions"][1]["flag_name"] == "Entertainment"
+    assert response_data["scheduled_transactions"][1]["flag"] == "Entertainment (Red)"
 
     # Check pagination
     assert response_data["pagination"]["total_count"] == 2
     assert response_data["pagination"]["has_more"] is False
-    assert response_data["pagination"]["returned_count"] == 2
 
 
 async def test_list_scheduled_transactions_with_frequency_filter(
@@ -717,8 +715,6 @@ async def test_list_scheduled_transactions_pagination(
     assert len(response_data["scheduled_transactions"]) == 5
     assert response_data["pagination"]["total_count"] == 15
     assert response_data["pagination"]["has_more"] is True
-    assert response_data["pagination"]["next_offset"] == 5
-    assert response_data["pagination"]["returned_count"] == 5
 
     # Test second page
     result = await mcp_client.call_tool(
@@ -735,7 +731,6 @@ async def test_list_scheduled_transactions_pagination(
     assert len(response_data["scheduled_transactions"]) == 5
     assert response_data["pagination"]["total_count"] == 15
     assert response_data["pagination"]["has_more"] is True
-    assert response_data["pagination"]["next_offset"] == 10
 
 
 async def test_list_scheduled_transactions_with_subtransactions(

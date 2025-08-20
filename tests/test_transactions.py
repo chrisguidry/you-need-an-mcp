@@ -122,12 +122,11 @@ async def test_list_transactions_basic(
     assert response_data["transactions"][1]["id"] == "txn-1"
     assert response_data["transactions"][1]["date"] == "2024-01-15"
     assert response_data["transactions"][1]["amount"] == "-50"
-    assert response_data["transactions"][1]["flag_color"] == "red"
+    assert response_data["transactions"][1]["flag"] == "Red"
 
     # Check pagination
     assert response_data["pagination"]["total_count"] == 2
     assert response_data["pagination"]["has_more"] is False
-    assert response_data["pagination"]["returned_count"] == 2
 
 
 async def test_list_transactions_with_account_filter(
@@ -464,8 +463,6 @@ async def test_list_transactions_pagination(
     assert len(response_data["transactions"]) == 2
     assert response_data["pagination"]["total_count"] == 5
     assert response_data["pagination"]["has_more"] is True
-    assert response_data["pagination"]["next_offset"] == 2
-    assert response_data["pagination"]["returned_count"] == 2
 
     # Transactions should be sorted by date descending
     assert response_data["transactions"][0]["id"] == "txn-4"

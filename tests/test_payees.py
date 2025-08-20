@@ -80,7 +80,6 @@ async def test_list_payees_success(
     # Check transfer payee details
     transfer_payee = response_data["payees"][1]
     assert transfer_payee["id"] == "payee-transfer"
-    assert transfer_payee["transfer_account_id"] == "acc-savings"
 
     # Check pagination
     assert response_data["pagination"]["total_count"] == 3
@@ -119,7 +118,6 @@ async def test_list_payees_pagination(
     assert len(response_data["payees"]) == 2
     assert response_data["pagination"]["total_count"] == 5
     assert response_data["pagination"]["has_more"] is True
-    assert response_data["pagination"]["next_offset"] == 2
 
     # Should be sorted alphabetically
     assert response_data["payees"][0]["name"] == "Store 00"
@@ -343,7 +341,6 @@ async def test_find_payee_limit(
     assert len(response_data["payees"]) == 2
     assert response_data["pagination"]["total_count"] == 5
     assert response_data["pagination"]["has_more"] is True
-    assert response_data["pagination"]["returned_count"] == 2
 
     # Should be first 2 in alphabetical order
     assert response_data["payees"][0]["name"] == "Store 00"
@@ -376,7 +373,6 @@ async def test_find_payee_no_matches(
     assert len(response_data["payees"]) == 0
     assert response_data["pagination"]["total_count"] == 0
     assert response_data["pagination"]["has_more"] is False
-    assert response_data["pagination"]["returned_count"] == 0
 
 
 async def test_find_payee_budget_id_or_default(

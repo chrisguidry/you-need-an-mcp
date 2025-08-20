@@ -48,17 +48,10 @@ class Budget(BaseModel):
 
     id: str = Field(..., description="Unique budget identifier")
     name: str = Field(..., description="User-defined budget name")
-    last_modified_on: datetime.datetime | None = Field(
-        None, description="Timestamp of last modification (UTC)"
-    )
-    first_month: datetime.date | None = Field(
-        None, description="First month available in this budget"
-    )
-    last_month: datetime.date | None = Field(
-        None, description="Last month available in this budget"
-    )
+    first_month: datetime.date | None = Field(None, description="First month available")
+    last_month: datetime.date | None = Field(None, description="Last month available")
     currency_format: CurrencyFormat | None = Field(
-        None, description="Currency formatting rules for this budget"
+        None, description="Currency formatting rules"
     )
 
     @classmethod
@@ -71,7 +64,6 @@ class Budget(BaseModel):
         return cls(
             id=budget.id,
             name=budget.name,
-            last_modified_on=budget.last_modified_on,
             first_month=budget.first_month,
             last_month=budget.last_month,
             currency_format=currency_format,
@@ -82,17 +74,9 @@ class PaginationInfo(BaseModel):
     """Pagination metadata for listing endpoints."""
 
     total_count: int = Field(..., description="Total number of items available")
-    limit: int = Field(..., description="Maximum items requested per page")
+    limit: int = Field(..., description="Maximum items per page")
     offset: int = Field(..., description="Number of items skipped")
-    has_more: bool = Field(
-        ..., description="Whether more items are available beyond this page"
-    )
-    next_offset: int | None = Field(
-        None, description="Offset to use for next page (null if no more pages)"
-    )
-    returned_count: int = Field(
-        ..., description="Actual number of items returned in this page"
-    )
+    has_more: bool = Field(..., description="Whether more items are available")
 
 
 class Account(BaseModel):
@@ -140,54 +124,30 @@ class Account(BaseModel):
 
 
 class Category(BaseModel):
-    """A YNAB category with budget and goal information.
-
-    Categories organize your spending into logical groups (e.g., "Groceries", "Gas",
-    "Entertainment"). Each category can have money budgeted to it and shows activity
-    (spending) and remaining balance.
-
-    Goal Types:
-    • NEED: Set aside a specific amount each month toward a goal
-    • TB (Target Balance): Work toward maintaining a specific balance
-    • TBD (Target Balance by Date): Reach a target balance by a specific date
-    • MF (Monthly Funding): Fund with the same amount each month
-
-    All monetary amounts are in currency units (not YNAB's internal milliunits).
-    """
+    """A YNAB category with budget and goal information."""
 
     id: str = Field(..., description="Unique category identifier")
-    name: str = Field(..., description="User-defined category name")
-    category_group_id: str = Field(
-        ..., description="ID of the category group this category belongs to"
-    )
+    name: str = Field(..., description="Category name")
+    category_group_id: str = Field(..., description="Category group ID")
     category_group_name: str | None = Field(None, description="Category group name")
-    note: str | None = Field(None, description="User-defined category notes")
-    budgeted: Decimal | None = Field(
-        None, description="Amount budgeted for this category in currency units"
-    )
+    note: str | None = Field(None, description="Category notes")
+    budgeted: Decimal | None = Field(None, description="Amount budgeted")
     activity: Decimal | None = Field(
         None,
-        description="Total spending activity (negative = spending, positive = income)",
+        description="Spending activity (negative = spending)",
     )
-    balance: Decimal | None = Field(
-        None, description="Available balance (budgeted + activity)"
-    )
+    balance: Decimal | None = Field(None, description="Available balance")
     goal_type: str | None = Field(
         None,
-        description="Type of goal set for this category:\n"
-        "• NEED: Set aside a specific amount each month\n"
-        "• TB: Target Balance - work toward a specific balance\n"
-        "• TBD: Target Balance by Date - reach balance by specific date\n"
-        "• MF: Monthly Funding - fund with same amount each month",
+        description="Goal type: NEED (monthly), TB (target balance), "
+        "TBD (by date), MF (funding)",
     )
-    goal_target: Decimal | None = Field(
-        None, description="Target amount for the goal in currency units"
-    )
+    goal_target: Decimal | None = Field(None, description="Goal target amount")
     goal_percentage_complete: int | None = Field(
-        None, description="Percentage of goal completed (0-100)"
+        None, description="Goal percentage complete"
     )
     goal_under_funded: Decimal | None = Field(
-        None, description="Amount still needed to meet goal in currency units"
+        None, description="Amount under-funded for goal"
     )
 
     @classmethod
@@ -227,29 +187,15 @@ class Category(BaseModel):
 
 
 class CategoryGroup(BaseModel):
-    """A YNAB category group with summary totals.
-
-    Groups organize related categories (e.g., 'Monthly Bills', 'Everyday Expenses').
-    Totals include all active categories in the group.
-    """
+    """A YNAB category group with summary totals."""
 
     id: str = Field(..., description="Unique category group identifier")
-    name: str = Field(..., description="User-defined category group name")
-    hidden: bool = Field(
-        ..., description="Whether this category group is hidden from normal budget view"
-    )
-    category_count: int = Field(
-        ..., description="Number of non-deleted categories in this group"
-    )
-    total_budgeted: Decimal | None = Field(
-        None, description="Sum of budgeted amounts for all categories in this group"
-    )
-    total_activity: Decimal | None = Field(
-        None, description="Sum of activity for all categories in this group"
-    )
-    total_balance: Decimal | None = Field(
-        None, description="Sum of balances for all categories in this group"
-    )
+    name: str = Field(..., description="Category group name")
+    hidden: bool = Field(..., description="Whether hidden from budget view")
+    category_count: int = Field(..., description="Number of categories in group")
+    total_budgeted: Decimal | None = Field(None, description="Total budgeted amount")
+    total_activity: Decimal | None = Field(None, description="Total activity")
+    total_balance: Decimal | None = Field(None, description="Total balance")
 
     @classmethod
     def from_ynab(
@@ -315,17 +261,11 @@ class BudgetMonth(BaseModel):
     )
 
 
-# Response models for MCP tools
-class BudgetsResponse(BaseModel):
-    """Response for list_budgets tool."""
-
-    budgets: list[Budget] = Field(..., description="List of available YNAB budgets")
-
-
+# Response models for tools that need pagination
 class AccountsResponse(BaseModel):
     """Response for list_accounts tool."""
 
-    accounts: list[Account] = Field(..., description="List of accounts in the budget")
+    accounts: list[Account] = Field(..., description="List of accounts")
     pagination: PaginationInfo = Field(..., description="Pagination information")
 
 
@@ -336,12 +276,13 @@ class CategoriesResponse(BaseModel):
     pagination: PaginationInfo = Field(..., description="Pagination information")
 
 
-class CategoryGroupsResponse(BaseModel):
-    """Response for list_category_groups tool."""
-
-    category_groups: list[CategoryGroup] = Field(
-        ..., description="List of category groups with totals"
-    )
+def format_flag(flag_color: str | None, flag_name: str | None) -> str | None:
+    """Format flag as 'Name (Color)' or just color if no name."""
+    if not flag_color:
+        return None
+    if flag_name:
+        return f"{flag_name} ({flag_color.title()})"
+    return flag_color.title()
 
 
 class BaseTransaction(BaseModel):
@@ -350,108 +291,63 @@ class BaseTransaction(BaseModel):
     id: str = Field(..., description="Unique identifier")
     amount: Decimal | None = Field(
         None,
-        description="Transaction amount in currency units. Negative values represent "
-        "outflows (spending/expenses), positive values represent inflows "
-        "(income/deposits)",
+        description="Amount in currency units (negative = spending, positive = income)",
     )
-    memo: str | None = Field(None, description="User-entered memo/notes")
-    flag_color: str | None = Field(
+    memo: str | None = Field(None, description="User-entered memo")
+    flag: str | None = Field(
         None,
-        description="Flag color: 'red', 'orange', 'yellow', 'green', 'blue', 'purple', "
-        "or null",
+        description="Flag as 'Name (Color)' format",
     )
-    account_id: str = Field(..., description="Account ID where transaction occurs")
+    account_id: str = Field(..., description="Account ID")
     account_name: str | None = Field(None, description="Account name")
-    payee_id: str | None = Field(None, description="Payee ID (who transaction is with)")
+    payee_id: str | None = Field(None, description="Payee ID")
     payee_name: str | None = Field(None, description="Payee name")
-    category_id: str | None = Field(
-        None, description="Category ID (null for transfers or uncategorized)"
-    )
+    category_id: str | None = Field(None, description="Category ID")
     category_name: str | None = Field(None, description="Category name")
-    transfer_account_id: str | None = Field(
-        None, description="If a transfer, the account ID of the other side"
-    )
 
 
 class Subtransaction(BaseModel):
-    """A subtransaction within a split transaction.
-
-    Subtransactions allow a single transaction to be split across multiple categories.
-    The parent transaction's amount must equal the sum of all subtransaction amounts.
-    """
+    """A subtransaction within a split transaction."""
 
     id: str = Field(..., description="Unique subtransaction identifier")
-    amount: Decimal | None = Field(
-        None, description="Subtransaction amount in currency units"
-    )
-    memo: str | None = Field(None, description="Subtransaction-specific memo")
-    payee_id: str | None = Field(
-        None, description="Payee ID (if different from parent)"
-    )
+    amount: Decimal | None = Field(None, description="Amount in currency units")
+    memo: str | None = Field(None, description="Memo")
+    payee_id: str | None = Field(None, description="Payee ID")
     payee_name: str | None = Field(None, description="Payee name")
-    category_id: str | None = Field(None, description="Category ID for this portion")
+    category_id: str | None = Field(None, description="Category ID")
     category_name: str | None = Field(None, description="Category name")
-    transfer_account_id: str | None = Field(
-        None, description="If a transfer, the account ID"
-    )
 
 
 class ScheduledSubtransaction(BaseModel):
-    """A scheduled subtransaction within a split scheduled transaction.
-
-    Similar to Subtransaction but for scheduled transactions.
-    """
+    """A scheduled subtransaction within a split scheduled transaction."""
 
     id: str = Field(..., description="Unique scheduled subtransaction identifier")
-    amount: Decimal | None = Field(
-        None, description="Scheduled subtransaction amount in currency units"
-    )
-    memo: str | None = Field(None, description="Scheduled subtransaction-specific memo")
-    payee_id: str | None = Field(
-        None, description="Payee ID (if different from parent)"
-    )
+    amount: Decimal | None = Field(None, description="Amount in currency units")
+    memo: str | None = Field(None, description="Memo")
+    payee_id: str | None = Field(None, description="Payee ID")
     payee_name: str | None = Field(None, description="Payee name")
-    category_id: str | None = Field(None, description="Category ID for this portion")
+    category_id: str | None = Field(None, description="Category ID")
     category_name: str | None = Field(None, description="Category name")
-    transfer_account_id: str | None = Field(
-        None, description="If a transfer, the account ID"
-    )
 
 
 class Transaction(BaseTransaction):
-    """A YNAB transaction with full details.
-
-    Transactions represent money moving in or out of accounts. Amounts are negative
-    for outflows (spending) and positive for inflows (income/deposits).
-
-    Flag colors can be: 'red', 'orange', 'yellow', 'green', 'blue', 'purple', or null.
-    Cleared status can be: 'cleared', 'uncleared', or 'reconciled'.
-    """
+    """A YNAB transaction with full details."""
 
     date: datetime.date = Field(..., description="Transaction date")
-    cleared: str = Field(
-        ..., description="Cleared status: 'cleared', 'uncleared', or 'reconciled'"
-    )
+    cleared: str = Field(..., description="Cleared status")
     approved: bool = Field(
         ...,
-        description="Whether transaction is approved (false if imported and "
-        "awaiting approval)",
+        description="Whether transaction is approved",
     )
-
-    # Subtransactions for split transactions
     subtransactions: list[Subtransaction] | None = Field(
-        None, description="Subtransactions for split transactions"
+        None, description="Subtransactions for splits"
     )
 
     @classmethod
     def from_ynab(
         cls, txn: ynab.TransactionDetail | ynab.HybridTransaction
     ) -> Transaction:
-        """Convert YNAB transaction object to our Transaction model.
-
-        Handles both TransactionDetail and HybridTransaction types that come from
-        different endpoints.
-        """
+        """Convert YNAB transaction object to our Transaction model."""
         # Convert amount from milliunits
         amount = milliunits_to_currency(txn.amount)
 
@@ -470,7 +366,6 @@ class Transaction(BaseTransaction):
                             payee_name=sub.payee_name,
                             category_id=sub.category_id,
                             category_name=sub.category_name,
-                            transfer_account_id=sub.transfer_account_id,
                         )
                     )
 
@@ -481,54 +376,33 @@ class Transaction(BaseTransaction):
             memo=txn.memo,
             cleared=txn.cleared,
             approved=txn.approved,
-            flag_color=txn.flag_color,
+            flag=format_flag(txn.flag_color, getattr(txn, "flag_name", None)),
             account_id=txn.account_id,
             account_name=getattr(txn, "account_name", None),
             payee_id=txn.payee_id,
             payee_name=getattr(txn, "payee_name", None),
             category_id=txn.category_id,
             category_name=getattr(txn, "category_name", None),
-            transfer_account_id=txn.transfer_account_id,
             subtransactions=subtransactions,
         )
 
 
 class ScheduledTransaction(BaseTransaction):
-    """A YNAB scheduled transaction with frequency and timing details.
+    """A YNAB scheduled transaction with frequency and timing details."""
 
-    Scheduled transactions represent recurring transactions that YNAB will create
-    automatically based on the specified frequency and timing.
-
-    Frequency can be: 'never', 'daily', 'weekly', 'everyOtherWeek', 'twiceAMonth',
-    'every4Weeks', 'monthly', 'everyOtherMonth', 'every3Months', 'every4Months',
-    'twiceAYear', 'yearly', 'everyOtherYear'
-    """
-
-    date_first: datetime.date = Field(
-        ..., description="Date of the first occurrence of this scheduled transaction"
-    )
-    date_next: datetime.date = Field(
-        ..., description="Date of the next occurrence of this scheduled transaction"
-    )
+    date_first: datetime.date = Field(..., description="First occurrence date")
+    date_next: datetime.date = Field(..., description="Next occurrence date")
     frequency: str = Field(
         ...,
-        description="Frequency of recurrence (never, daily, weekly, monthly, etc.)",
+        description="Recurrence frequency",
     )
-    flag_name: str | None = Field(
-        None, description="Human-readable flag name instead of just color"
-    )
-
-    # Subtransactions for split scheduled transactions
     subtransactions: list[ScheduledSubtransaction] | None = Field(
-        None, description="Scheduled subtransactions for split scheduled transactions"
+        None, description="Scheduled subtransactions for splits"
     )
 
     @classmethod
     def from_ynab(cls, st: ynab.ScheduledTransactionDetail) -> ScheduledTransaction:
-        """Convert YNAB scheduled transaction object to our ScheduledTransaction model.
-
-        Handles ScheduledTransactionDetail objects from the scheduled transactions API.
-        """
+        """Convert YNAB scheduled transaction to ScheduledTransaction model."""
         # Convert amount from milliunits
         amount = milliunits_to_currency(st.amount)
 
@@ -547,7 +421,6 @@ class ScheduledTransaction(BaseTransaction):
                             payee_name=sub.payee_name,
                             category_id=sub.category_id,
                             category_name=sub.category_name,
-                            transfer_account_id=sub.transfer_account_id,
                         )
                     )
 
@@ -558,15 +431,13 @@ class ScheduledTransaction(BaseTransaction):
             frequency=st.frequency,
             amount=amount,
             memo=st.memo,
-            flag_color=st.flag_color,
-            flag_name=getattr(st, "flag_name", None),
+            flag=format_flag(st.flag_color, getattr(st, "flag_name", None)),
             account_id=st.account_id,
             account_name=getattr(st, "account_name", None),
             payee_id=st.payee_id,
             payee_name=getattr(st, "payee_name", None),
             category_id=st.category_id,
             category_name=getattr(st, "category_name", None),
-            transfer_account_id=st.transfer_account_id,
             subtransactions=subtransactions,
         )
 
@@ -574,26 +445,15 @@ class ScheduledTransaction(BaseTransaction):
 class TransactionsResponse(BaseModel):
     """Response for list_transactions tool."""
 
-    transactions: list[Transaction] = Field(
-        ..., description="List of transactions matching filters"
-    )
+    transactions: list[Transaction] = Field(..., description="List of transactions")
     pagination: PaginationInfo = Field(..., description="Pagination information")
 
 
 class Payee(BaseModel):
-    """A YNAB payee (person, company, or entity that receives payments).
-
-    YNAB uses 'payees' to represent who you pay money to (merchants, people,
-    companies, etc.). Payees can be manually created or automatically created
-    when transactions are imported. Transfer payees are special system-generated
-    payees for account transfers.
-    """
+    """A YNAB payee (person, company, or entity that receives payments)."""
 
     id: str = Field(..., description="Unique payee identifier")
     name: str = Field(..., description="Payee name")
-    transfer_account_id: str | None = Field(
-        None, description="If this is a transfer payee, the associated account ID"
-    )
 
     @classmethod
     def from_ynab(cls, payee: ynab.Payee) -> Payee:
@@ -601,14 +461,13 @@ class Payee(BaseModel):
         return cls(
             id=payee.id,
             name=payee.name,
-            transfer_account_id=payee.transfer_account_id,
         )
 
 
 class PayeesResponse(BaseModel):
     """Response for list_payees tool."""
 
-    payees: list[Payee] = Field(..., description="List of payees in the budget")
+    payees: list[Payee] = Field(..., description="List of payees")
     pagination: PaginationInfo = Field(..., description="Pagination information")
 
 
@@ -616,6 +475,6 @@ class ScheduledTransactionsResponse(BaseModel):
     """Response for list_scheduled_transactions tool."""
 
     scheduled_transactions: list[ScheduledTransaction] = Field(
-        ..., description="List of scheduled transactions matching filters"
+        ..., description="List of scheduled transactions"
     )
     pagination: PaginationInfo = Field(..., description="Pagination information")
