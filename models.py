@@ -139,8 +139,8 @@ class Category(BaseModel):
     balance: Decimal | None = Field(None, description="Available balance")
     goal_type: str | None = Field(
         None,
-        description="Goal type: NEED (monthly), TB (target balance), "
-        "TBD (by date), MF (funding)",
+        description="Goal type: NEED (refill up to X monthly - budget full target), "
+        "TB (target balance by date), TBD (target by specific date), MF (funding)",
     )
     goal_target: Decimal | None = Field(None, description="Goal target amount")
     goal_percentage_complete: int | None = Field(

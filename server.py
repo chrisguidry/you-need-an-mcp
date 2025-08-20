@@ -710,3 +710,139 @@ def list_scheduled_transactions(
         return ScheduledTransactionsResponse(
             scheduled_transactions=scheduled_transactions_page, pagination=pagination
         )
+
+
+@mcp.tool()
+def update_category_budget(
+    category_id: str,
+    budgeted: Decimal,
+    month: date | Literal["current", "last", "next"] = "current",
+    budget_id: str | None = None,
+) -> Category:
+    """Update the budgeted amount for a category in a specific month.
+
+    This tool allows you to assign money to budget categories, which is essential
+    for monthly budget maintenance and reallocation.
+
+    IMPORTANT: For categories with NEED goals (refill up to X monthly), budget the
+    full goal_target amount regardless of current balance. These goals expect the
+    full target to be budgeted each month.
+
+    Args:
+        category_id: Unique identifier for the category to update (required)
+        budgeted: Amount to budget for this category in currency units (required)
+        month: Budget month to update:
+              • "current": Current calendar month
+              • "last": Previous calendar month
+              • "next": Next calendar month
+              • date object: Specific month (uses first day of month)
+              (default: "current")
+        budget_id: Unique identifier for the budget. If not provided, uses the default
+                  budget from YNAB_DEFAULT_BUDGET environment variable (optional)
+
+    Returns:
+        Category with updated budget information
+    """
+    budget_id = budget_id_or_default(budget_id)
+
+    with get_ynab_client() as api_client:
+        categories_api = ynab.CategoriesApi(api_client)
+        converted_month = convert_month_to_date(month)
+
+        # Convert currency units to milliunits and create patch
+        budgeted_milliunits = int(budgeted * 1000)
+        save_month_category = ynab.SaveMonthCategory(budgeted=budgeted_milliunits)
+        patch_wrapper = ynab.PatchMonthCategoryWrapper(category=save_month_category)
+
+        response = categories_api.update_month_category(
+            budget_id, converted_month, category_id, patch_wrapper
+        )
+
+        # Get category group name for the response
+        categories_response = categories_api.get_categories(budget_id)
+        category_group_map = _build_category_group_map(
+            categories_response.data.category_groups
+        )
+        group_name = category_group_map.get(category_id)
+
+        return Category.from_ynab(response.data.category, group_name)
+
+
+@mcp.tool()
+def update_transaction(
+    transaction_id: str,
+    category_id: str | None = None,
+    payee_id: str | None = None,
+    memo: str | None = None,
+    budget_id: str | None = None,
+) -> Transaction:
+    """Update an existing transaction's details.
+
+    This tool allows you to modify transaction properties, most commonly
+    to assign the correct category to imported or uncategorized transactions.
+
+    Args:
+        transaction_id: Unique identifier for the transaction to update (required)
+        category_id: Category ID to assign (optional)
+        payee_id: Payee ID to assign (optional)
+        memo: Transaction memo (optional)
+        budget_id: Unique identifier for the budget. If not provided, uses the default
+                  budget from YNAB_DEFAULT_BUDGET environment variable (optional)
+
+    Returns:
+        Transaction with updated information
+    """
+    budget_id = budget_id_or_default(budget_id)
+
+    with get_ynab_client() as api_client:
+        transactions_api = ynab.TransactionsApi(api_client)
+
+        # First, get the existing transaction to preserve its current values
+        existing_response = transactions_api.get_transaction_by_id(
+            budget_id, transaction_id
+        )
+        existing_txn = existing_response.data.transaction
+
+        # Build the update data starting with existing transaction values
+        update_data = {
+            "account_id": existing_txn.account_id,
+            "date": existing_txn.var_date,  # ExistingTransaction uses 'date'
+            "amount": existing_txn.amount,
+            "payee_id": existing_txn.payee_id,
+            "payee_name": existing_txn.payee_name,
+            "category_id": existing_txn.category_id,
+            "memo": existing_txn.memo,
+            "cleared": existing_txn.cleared,
+            "approved": existing_txn.approved,
+            "flag_color": existing_txn.flag_color,
+            "subtransactions": existing_txn.subtransactions,
+        }
+
+        # Apply only the fields we want to change
+        if category_id is not None:
+            update_data["category_id"] = category_id
+        if payee_id is not None:
+            update_data["payee_id"] = payee_id
+        if memo is not None:
+            update_data["memo"] = memo
+
+        existing_transaction = ynab.ExistingTransaction(
+            account_id=update_data["account_id"],  # type: ignore[arg-type]
+            date=update_data["date"],  # type: ignore[arg-type]
+            amount=update_data["amount"],  # type: ignore[arg-type]
+            payee_id=update_data["payee_id"],  # type: ignore[arg-type]
+            payee_name=update_data["payee_name"],  # type: ignore[arg-type]
+            category_id=update_data["category_id"],  # type: ignore[arg-type]
+            memo=update_data["memo"],  # type: ignore[arg-type]
+            cleared=update_data["cleared"],  # type: ignore[arg-type]
+            approved=update_data["approved"],  # type: ignore[arg-type]
+            flag_color=update_data["flag_color"],  # type: ignore[arg-type]
+            subtransactions=update_data["subtransactions"],  # type: ignore[arg-type]
+        )
+        put_wrapper = ynab.PutTransactionWrapper(transaction=existing_transaction)
+
+        response = transactions_api.update_transaction(
+            budget_id, transaction_id, put_wrapper
+        )
+
+        return Transaction.from_ynab(response.data.transaction)
