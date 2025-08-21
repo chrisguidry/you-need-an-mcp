@@ -22,54 +22,6 @@ def milliunits_to_currency(milliunits: int, decimal_digits: int = 2) -> Decimal:
     return Decimal(milliunits) / Decimal("1000")
 
 
-class CurrencyFormat(BaseModel):
-    """Currency formatting information for display."""
-
-    iso_code: str = Field(
-        ..., description="ISO 4217 currency code (e.g., 'USD', 'EUR')"
-    )
-    example_format: str = Field(
-        ..., description="Example of how currency should be formatted (e.g., '$123.45')"
-    )
-    currency_symbol: str = Field(..., description="Currency symbol (e.g., '$', '€')")
-
-    @classmethod
-    def from_ynab(cls, currency_format: ynab.CurrencyFormat) -> CurrencyFormat:
-        """Convert YNAB CurrencyFormat object to our CurrencyFormat model."""
-        return cls(
-            iso_code=currency_format.iso_code,
-            example_format=currency_format.example_format,
-            currency_symbol=currency_format.currency_symbol,
-        )
-
-
-class Budget(BaseModel):
-    """A YNAB budget with metadata."""
-
-    id: str = Field(..., description="Unique budget identifier")
-    name: str = Field(..., description="User-defined budget name")
-    first_month: datetime.date | None = Field(None, description="First month available")
-    last_month: datetime.date | None = Field(None, description="Last month available")
-    currency_format: CurrencyFormat | None = Field(
-        None, description="Currency formatting rules"
-    )
-
-    @classmethod
-    def from_ynab(cls, budget: ynab.BudgetSummary) -> Budget:
-        """Convert YNAB BudgetSummary object to our Budget model."""
-        currency_format = None
-        if budget.currency_format:
-            currency_format = CurrencyFormat.from_ynab(budget.currency_format)
-
-        return cls(
-            id=budget.id,
-            name=budget.name,
-            first_month=budget.first_month,
-            last_month=budget.last_month,
-            currency_format=currency_format,
-        )
-
-
 class PaginationInfo(BaseModel):
     """Pagination metadata for listing endpoints."""
 

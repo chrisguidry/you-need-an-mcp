@@ -9,7 +9,6 @@ from fastmcp import FastMCP
 from models import (
     Account,
     AccountsResponse,
-    Budget,
     BudgetMonth,
     CategoriesResponse,
     Category,
@@ -27,21 +26,18 @@ from models import (
 mcp = FastMCP[None](
     name="YNAB",
     instructions="""
-    Gives you access to a user's YNAB account, including budgets, accounts, and
-    transactions.  If a user is ever asking about budgeting, their personal finances,
-    banking, saving, or investing, their YNAB budget is very relevant to them.  When
-    they don't specify a budget, you can skip looking up or passing a budget ID because
-    they are probably talking about their default/only budget.  When the user asks about
-    budget categories and "how much is left", they are talking about the current month.
+    Gives you access to a user's YNAB budget, including accounts, categories, and
+    transactions. If a user is ever asking about budgeting, their personal finances,
+    banking, saving, or investing, their YNAB budget is very relevant to them.
+    When the user asks about budget categories and "how much is left", they are
+    talking about the current month.
 
     Budget categories are grouped into category groups, which are important groupings
-    to the user and should be displayed in a hierarchical manner.  Categories will have
+    to the user and should be displayed in a hierarchical manner. Categories will have
     the category_group_name and category_group_id available.
 
-    IMPORTANT: For any tool that accepts a budget_id parameter, if the user is asking
-    about their data in general (not a specific budget), you can omit the budget_id
-    parameter entirely. Do NOT call list_budgets first - just call the tool without
-    budget_id and it will use their default budget automatically.
+    The server operates on a single budget configured via the YNAB_BUDGET environment
+    variable. All tools work with this budget automatically.
     """,
 )
 
@@ -56,21 +52,8 @@ def get_ynab_client() -> ynab.ApiClient:
     return ynab.ApiClient(configuration)
 
 
-def get_default_budget_id() -> str:
-    """Get default budget ID from environment variable."""
-    budget_id = os.getenv("YNAB_DEFAULT_BUDGET")
-    if not budget_id:
-        raise ValueError(
-            "budget_id is required or set YNAB_DEFAULT_BUDGET environment variable"
-        )
-    return budget_id
-
-
-def budget_id_or_default(budget_id: str | None) -> str:
-    """Return provided budget_id or default if None."""
-    if budget_id is None:
-        return get_default_budget_id()
-    return budget_id
+# Load budget ID at module import - fail fast if not configured
+BUDGET_ID = os.environ["YNAB_BUDGET"]
 
 
 def _paginate_items[T](
@@ -166,39 +149,24 @@ def convert_month_to_date(
 
 
 @mcp.tool()
-def list_budgets() -> list[Budget]:
-    """List all budgets from YNAB with metadata."""
-    with get_ynab_client() as api_client:
-        budgets_api = ynab.BudgetsApi(api_client)
-        budgets_response = budgets_api.get_budgets()
-
-        return [Budget.from_ynab(budget) for budget in budgets_response.data.budgets]
-
-
-@mcp.tool()
 def list_accounts(
     limit: int = 100,
     offset: int = 0,
-    budget_id: str | None = None,
 ) -> AccountsResponse:
-    """List accounts for a specific budget with pagination.
+    """List accounts with pagination.
 
     Only returns open/active accounts. Closed accounts are excluded automatically.
 
     Args:
         limit: Maximum number of accounts to return per page (default: 100)
         offset: Number of accounts to skip for pagination (default: 0)
-        budget_id: Unique identifier for the budget. If not provided, uses the default
-                  budget from YNAB_DEFAULT_BUDGET environment variable (optional)
 
     Returns:
         AccountsResponse with accounts list and pagination information
     """
-    budget_id = budget_id_or_default(budget_id)
-
     with get_ynab_client() as api_client:
         accounts_api = ynab.AccountsApi(api_client)
-        accounts_response = accounts_api.get_accounts(budget_id)
+        accounts_response = accounts_api.get_accounts(BUDGET_ID)
 
         active_accounts = _filter_active_items(
             accounts_response.data.accounts, exclude_closed=True
@@ -214,9 +182,8 @@ def list_accounts(
 def list_categories(
     limit: int = 50,
     offset: int = 0,
-    budget_id: str | None = None,
 ) -> CategoriesResponse:
-    """List categories for a specific budget with pagination.
+    """List categories with pagination.
 
     Only returns active/visible categories. Hidden and deleted categories are excluded
     automatically.
@@ -224,17 +191,13 @@ def list_categories(
     Args:
         limit: Maximum number of categories to return per page (default: 50)
         offset: Number of categories to skip for pagination (default: 0)
-        budget_id: Unique identifier for the budget. If not provided, uses the default
-                  budget from YNAB_DEFAULT_BUDGET environment variable (optional)
 
     Returns:
         CategoriesResponse with categories list and pagination information
     """
-    budget_id = budget_id_or_default(budget_id)
-
     with get_ynab_client() as api_client:
         categories_api = ynab.CategoriesApi(api_client)
-        categories_response = categories_api.get_categories(budget_id)
+        categories_response = categories_api.get_categories(BUDGET_ID)
 
         all_categories = []
         for category_group in categories_response.data.category_groups:
@@ -255,21 +218,15 @@ def list_categories(
 
 
 @mcp.tool()
-def list_category_groups(budget_id: str | None = None) -> list[CategoryGroup]:
-    """List category groups for a specific budget (lighter weight than full categories).
-
-    Args:
-        budget_id: Unique identifier for the budget. If not provided, uses the default
-                  budget from YNAB_DEFAULT_BUDGET environment variable (optional)
+def list_category_groups() -> list[CategoryGroup]:
+    """List category groups (lighter weight than full categories).
 
     Returns:
         List of category groups
     """
-    budget_id = budget_id_or_default(budget_id)
-
     with get_ynab_client() as api_client:
         categories_api = ynab.CategoriesApi(api_client)
-        categories_response = categories_api.get_categories(budget_id)
+        categories_response = categories_api.get_categories(BUDGET_ID)
 
         active_groups = _filter_active_items(categories_response.data.category_groups)
         groups = [
@@ -284,7 +241,6 @@ def get_budget_month(
     month: date | Literal["current", "last", "next"] = "current",
     limit: int = 50,
     offset: int = 0,
-    budget_id: str | None = None,
 ) -> BudgetMonth:
     """Get budget data for a specific month including category budgets, activity, and
     balances with pagination.
@@ -301,22 +257,18 @@ def get_budget_month(
               Examples: "current", date(2024, 3, 1) for March 2024 (default: "current")
         limit: Maximum number of categories to return per page (default: 50)
         offset: Number of categories to skip for pagination (default: 0)
-        budget_id: Unique identifier for the budget. If not provided, uses the default
-                  budget from YNAB_DEFAULT_BUDGET environment variable (optional)
 
     Returns:
         BudgetMonth with month info, categories, and pagination
     """
-    budget_id = budget_id_or_default(budget_id)
-
     with get_ynab_client() as api_client:
         months_api = ynab.MonthsApi(api_client)
         converted_month = convert_month_to_date(month)
-        month_response = months_api.get_budget_month(budget_id, converted_month)
+        month_response = months_api.get_budget_month(BUDGET_ID, converted_month)
 
         # Fetch category groups for names
         categories_api = ynab.CategoriesApi(api_client)
-        categories_response = categories_api.get_categories(budget_id)
+        categories_response = categories_api.get_categories(BUDGET_ID)
 
         # Map category IDs to group names
         category_group_map = _build_category_group_map(
@@ -352,7 +304,6 @@ def get_budget_month(
 def get_month_category_by_id(
     category_id: str,
     month: date | Literal["current", "last", "next"] = "current",
-    budget_id: str | None = None,
 ) -> Category:
     """Get a specific category's data for a specific month.
 
@@ -364,25 +315,21 @@ def get_month_category_by_id(
               • "next": Next calendar month
               • date object: Specific month (uses first day of month)
               Examples: "current", date(2024, 3, 1) for March 2024 (default: "current")
-        budget_id: Unique identifier for the budget. If not provided, uses the default
-                  budget from YNAB_DEFAULT_BUDGET environment variable (optional)
 
     Returns:
         Category with budget data for the specified month
     """
-    budget_id = budget_id_or_default(budget_id)
-
     with get_ynab_client() as api_client:
         categories_api = ynab.CategoriesApi(api_client)
         converted_month = convert_month_to_date(month)
         category_response = categories_api.get_month_category_by_id(
-            budget_id, converted_month, category_id
+            BUDGET_ID, converted_month, category_id
         )
 
         category = category_response.data.category
 
         # Fetch category groups to get group name
-        categories_response = categories_api.get_categories(budget_id)
+        categories_response = categories_api.get_categories(BUDGET_ID)
         category_group_map = _build_category_group_map(
             categories_response.data.category_groups
         )
@@ -401,7 +348,6 @@ def list_transactions(
     max_amount: Decimal | None = None,
     limit: int = 25,
     offset: int = 0,
-    budget_id: str | None = None,
 ) -> TransactionsResponse:
     """List transactions with powerful filtering options for financial analysis.
 
@@ -435,14 +381,10 @@ def list_transactions(
                    (e.g., -10.00 for under $10 expenses) (optional)
         limit: Maximum number of transactions to return per page (default: 25)
         offset: Number of transactions to skip for pagination (default: 0)
-        budget_id: Unique identifier for the budget. If not provided, uses the default
-                  budget from YNAB_DEFAULT_BUDGET environment variable (optional)
 
     Returns:
         TransactionsResponse with filtered transactions and pagination info
     """
-    budget_id = budget_id_or_default(budget_id)
-
     with get_ynab_client() as api_client:
         transactions_api = ynab.TransactionsApi(api_client)
 
@@ -451,7 +393,7 @@ def list_transactions(
         if account_id:
             # Use account-specific endpoint if account filter is provided
             response = transactions_api.get_transactions_by_account(
-                budget_id,
+                BUDGET_ID,
                 account_id,
                 since_date=since_date,
                 type=None,  # Include all transaction types
@@ -459,17 +401,17 @@ def list_transactions(
         elif category_id:
             # Use category-specific endpoint if category filter is provided
             response = transactions_api.get_transactions_by_category(
-                budget_id, category_id, since_date=since_date, type=None
+                BUDGET_ID, category_id, since_date=since_date, type=None
             )
         elif payee_id:
             # Use payee-specific endpoint if payee filter is provided
             response = transactions_api.get_transactions_by_payee(
-                budget_id, payee_id, since_date=since_date, type=None
+                BUDGET_ID, payee_id, since_date=since_date, type=None
             )
         else:
             # Use general transactions endpoint
             response = transactions_api.get_transactions(
-                budget_id, since_date=since_date, type=None
+                BUDGET_ID, since_date=since_date, type=None
             )
 
         transactions_data: list[ynab.TransactionDetail | ynab.HybridTransaction] = cast(
@@ -509,7 +451,6 @@ def list_transactions(
 def list_payees(
     limit: int = 50,
     offset: int = 0,
-    budget_id: str | None = None,
 ) -> PayeesResponse:
     """List payees for a specific budget with pagination.
 
@@ -525,17 +466,13 @@ def list_payees(
     Args:
         limit: Maximum number of payees to return per page (default: 50)
         offset: Number of payees to skip for pagination (default: 0)
-        budget_id: Unique identifier for the budget. If not provided, uses the default
-                  budget from YNAB_DEFAULT_BUDGET environment variable (optional)
 
     Returns:
         PayeesResponse with payees list and pagination information
     """
-    budget_id = budget_id_or_default(budget_id)
-
     with get_ynab_client() as api_client:
         payees_api = ynab.PayeesApi(api_client)
-        payees_response = payees_api.get_payees(budget_id)
+        payees_response = payees_api.get_payees(BUDGET_ID)
 
         active_payees = _filter_active_items(payees_response.data.payees)
         all_payees = [Payee.from_ynab(payee) for payee in active_payees]
@@ -552,7 +489,6 @@ def list_payees(
 def find_payee(
     name_search: str,
     limit: int = 10,
-    budget_id: str | None = None,
 ) -> PayeesResponse:
     """Find payees by searching for name substrings (case-insensitive).
 
@@ -569,17 +505,13 @@ def find_payee(
         name_search: Search term to match against payee names (case-insensitive
                      substring match). Examples: "amazon", "starbucks", "grocery"
         limit: Maximum number of matching payees to return (default: 10)
-        budget_id: Unique identifier for the budget. If not provided, uses the default
-                  budget from YNAB_DEFAULT_BUDGET environment variable (optional)
 
     Returns:
         PayeesResponse with matching payees and pagination information
     """
-    budget_id = budget_id_or_default(budget_id)
-
     with get_ynab_client() as api_client:
         payees_api = ynab.PayeesApi(api_client)
-        payees_response = payees_api.get_payees(budget_id)
+        payees_response = payees_api.get_payees(BUDGET_ID)
 
         active_payees = _filter_active_items(payees_response.data.payees)
         search_term = name_search.lower().strip()
@@ -620,7 +552,6 @@ def list_scheduled_transactions(
     max_amount: Decimal | None = None,
     limit: int = 25,
     offset: int = 0,
-    budget_id: str | None = None,
 ) -> ScheduledTransactionsResponse:
     """List scheduled transactions with powerful filtering options for analysis.
 
@@ -658,18 +589,14 @@ def list_scheduled_transactions(
                    (optional)
         limit: Maximum number of scheduled transactions to return per page (default: 25)
         offset: Number of scheduled transactions to skip for pagination (default: 0)
-        budget_id: Unique identifier for the budget. If not provided, uses the default
-                  budget from YNAB_DEFAULT_BUDGET environment variable (optional)
 
     Returns:
         ScheduledTransactionsResponse with filtered scheduled transactions and
         pagination info
     """
-    budget_id = budget_id_or_default(budget_id)
-
     with get_ynab_client() as api_client:
         scheduled_transactions_api = ynab.ScheduledTransactionsApi(api_client)
-        response = scheduled_transactions_api.get_scheduled_transactions(budget_id)
+        response = scheduled_transactions_api.get_scheduled_transactions(BUDGET_ID)
 
         active_scheduled_transactions = _filter_active_items(
             response.data.scheduled_transactions
@@ -717,7 +644,6 @@ def update_category_budget(
     category_id: str,
     budgeted: Decimal,
     month: date | Literal["current", "last", "next"] = "current",
-    budget_id: str | None = None,
 ) -> Category:
     """Update the budgeted amount for a category in a specific month.
 
@@ -737,14 +663,10 @@ def update_category_budget(
               • "next": Next calendar month
               • date object: Specific month (uses first day of month)
               (default: "current")
-        budget_id: Unique identifier for the budget. If not provided, uses the default
-                  budget from YNAB_DEFAULT_BUDGET environment variable (optional)
 
     Returns:
         Category with updated budget information
     """
-    budget_id = budget_id_or_default(budget_id)
-
     with get_ynab_client() as api_client:
         categories_api = ynab.CategoriesApi(api_client)
         converted_month = convert_month_to_date(month)
@@ -755,11 +677,11 @@ def update_category_budget(
         patch_wrapper = ynab.PatchMonthCategoryWrapper(category=save_month_category)
 
         response = categories_api.update_month_category(
-            budget_id, converted_month, category_id, patch_wrapper
+            BUDGET_ID, converted_month, category_id, patch_wrapper
         )
 
         # Get category group name for the response
-        categories_response = categories_api.get_categories(budget_id)
+        categories_response = categories_api.get_categories(BUDGET_ID)
         category_group_map = _build_category_group_map(
             categories_response.data.category_groups
         )
@@ -774,7 +696,6 @@ def update_transaction(
     category_id: str | None = None,
     payee_id: str | None = None,
     memo: str | None = None,
-    budget_id: str | None = None,
 ) -> Transaction:
     """Update an existing transaction's details.
 
@@ -786,20 +707,16 @@ def update_transaction(
         category_id: Category ID to assign (optional)
         payee_id: Payee ID to assign (optional)
         memo: Transaction memo (optional)
-        budget_id: Unique identifier for the budget. If not provided, uses the default
-                  budget from YNAB_DEFAULT_BUDGET environment variable (optional)
 
     Returns:
         Transaction with updated information
     """
-    budget_id = budget_id_or_default(budget_id)
-
     with get_ynab_client() as api_client:
         transactions_api = ynab.TransactionsApi(api_client)
 
         # First, get the existing transaction to preserve its current values
         existing_response = transactions_api.get_transaction_by_id(
-            budget_id, transaction_id
+            BUDGET_ID, transaction_id
         )
         existing_txn = existing_response.data.transaction
 
@@ -842,7 +759,7 @@ def update_transaction(
         put_wrapper = ynab.PutTransactionWrapper(transaction=existing_transaction)
 
         response = transactions_api.update_transaction(
-            budget_id, transaction_id, put_wrapper
+            BUDGET_ID, transaction_id, put_wrapper
         )
 
         return Transaction.from_ynab(response.data.transaction)

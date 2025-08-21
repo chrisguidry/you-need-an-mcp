@@ -14,7 +14,7 @@ fastmcp run server.py:mcp  # Run MCP server
 
 # Authentication (required)
 export YNAB_ACCESS_TOKEN=your_token_here
-export YNAB_DEFAULT_BUDGET=your_budget_id_here  # Optional
+export YNAB_BUDGET=your_budget_id_here  # Required
 ```
 
 ## Critical Design Principles

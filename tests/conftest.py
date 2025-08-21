@@ -45,13 +45,6 @@ def accounts_api(ynab_client: MagicMock) -> Generator[MagicMock, None, None]:
 
 
 @pytest.fixture
-def budgets_api(ynab_client: MagicMock) -> Generator[MagicMock, None, None]:
-    mock_api = Mock(spec=ynab.BudgetsApi)
-    with patch("ynab.BudgetsApi", return_value=mock_api):
-        yield mock_api
-
-
-@pytest.fixture
 def categories_api(ynab_client: MagicMock) -> Generator[MagicMock, None, None]:
     mock_api = Mock(spec=ynab.CategoriesApi)
     with patch("ynab.CategoriesApi", return_value=mock_api):

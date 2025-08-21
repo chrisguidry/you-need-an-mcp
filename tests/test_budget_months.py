@@ -145,7 +145,7 @@ async def test_get_month_category_by_id_success(
 
     result = await mcp_client.call_tool(
         "get_month_category_by_id",
-        {"category_id": "cat-1", "budget_id": "budget-123"},
+        {"category_id": "cat-1"},
     )
 
     assert len(result) == 1

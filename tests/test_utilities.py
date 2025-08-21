@@ -70,20 +70,6 @@ def test_milliunits_to_currency_negative() -> None:
     assert result == Decimal("-50")
 
 
-def test_get_default_budget_id_with_env_var(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Test getting default budget ID when environment variable is set."""
-    monkeypatch.setenv("YNAB_DEFAULT_BUDGET", "test-budget-123")
-    result = server.get_default_budget_id()
-    assert result == "test-budget-123"
-
-
-def test_get_default_budget_id_missing_env_var(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Test getting default budget ID when environment variable is missing."""
-    monkeypatch.delenv("YNAB_DEFAULT_BUDGET", raising=False)
-    with pytest.raises(ValueError, match="budget_id is required"):
-        server.get_default_budget_id()
-
-
 def test_get_ynab_client_with_token(monkeypatch: pytest.MonkeyPatch) -> None:
     """Test YNAB client creation with valid token."""
     monkeypatch.setenv("YNAB_ACCESS_TOKEN", "test_token")
@@ -158,28 +144,6 @@ def test_convert_month_to_date_invalid_value() -> None:
     """Test convert_month_to_date with invalid value raises error."""
     with pytest.raises(ValueError, match="Invalid month value: invalid"):
         server.convert_month_to_date("invalid")  # type: ignore[arg-type]
-
-
-def test_budget_id_or_default_with_value() -> None:
-    """Test budget_id_or_default returns provided value when not None."""
-    result = server.budget_id_or_default("custom-budget-123")
-    assert result == "custom-budget-123"
-
-
-def test_budget_id_or_default_with_none(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Test budget_id_or_default returns default when None."""
-    monkeypatch.setenv("YNAB_DEFAULT_BUDGET", "default-budget-456")
-    result = server.budget_id_or_default(None)
-    assert result == "default-budget-456"
-
-
-def test_budget_id_or_default_with_none_missing_env(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """Test budget_id_or_default raises error when None and no env var."""
-    monkeypatch.delenv("YNAB_DEFAULT_BUDGET", raising=False)
-    with pytest.raises(ValueError, match="budget_id is required"):
-        server.budget_id_or_default(None)
 
 
 def test_convert_transaction_to_model_basic() -> None:

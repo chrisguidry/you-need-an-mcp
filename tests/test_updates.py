@@ -151,7 +151,7 @@ async def test_update_category_budget_success(
     # Verify the API was called correctly
     categories_api.update_month_category.assert_called_once()
     call_args = categories_api.update_month_category.call_args[0]
-    assert call_args[0] == "budget-123"  # budget_id (from mock environment)
+    assert call_args[0] == "test_budget_id"  # budget_id (from mock environment)
     assert call_args[1].year == 2025  # current month (from date.today())
     assert call_args[2] == "cat-groceries"  # category_id
 
@@ -234,11 +234,11 @@ async def test_update_transaction_success(
 
     # Verify the API was called correctly
     transactions_api.get_transaction_by_id.assert_called_once_with(
-        "budget-123", "txn-123"
+        "test_budget_id", "txn-123"
     )
     transactions_api.update_transaction.assert_called_once()
     call_args = transactions_api.update_transaction.call_args[0]
-    assert call_args[0] == "budget-123"  # budget_id (from mock environment)
+    assert call_args[0] == "test_budget_id"  # budget_id (from mock environment)
     assert call_args[1] == "txn-123"  # transaction_id
 
     # Verify the put wrapper contains correct data (only fields we changed)

@@ -7,7 +7,7 @@ to ensure correct filtering, pagination, and search behavior.
 
 import json
 from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import ynab
 from fastmcp.client import Client, FastMCPTransport
@@ -373,27 +373,3 @@ async def test_find_payee_no_matches(
     assert len(response_data["payees"]) == 0
     assert response_data["pagination"]["total_count"] == 0
     assert response_data["pagination"]["has_more"] is False
-
-
-async def test_find_payee_budget_id_or_default(
-    mock_environment_variables: None,
-    payees_api: MagicMock,
-    mcp_client: Client[FastMCPTransport],
-) -> None:
-    """Test find_payee uses budget_id_or_default helper."""
-
-    payees_response = ynab.PayeesResponse(
-        data=ynab.PayeesResponseData(payees=[], server_knowledge=1000)
-    )
-
-    payees_api.get_payees.return_value = payees_response
-
-    with patch("server.budget_id_or_default") as mock_budget_helper:
-        mock_budget_helper.return_value = "default-budget-123"
-
-        await mcp_client.call_tool("find_payee", {"name_search": "test"})
-
-        # Should call the helper with None
-        mock_budget_helper.assert_called_once_with(None)
-        # Should call the API with the returned budget ID
-        payees_api.get_payees.assert_called_once_with("default-budget-123")
