@@ -104,13 +104,8 @@ async def test_update_category_budget_success(
         balance=50_000,  # $50.00
     )
 
-    # Mock the update response
-    save_response = ynab.SaveCategoryResponse(
-        data=ynab.SaveCategoryResponseData(
-            category=updated_category, server_knowledge=0
-        )
-    )
-    categories_api.update_month_category.return_value = save_response
+    # Mock repository methods
+    mock_repository.update_month_category.return_value = updated_category
 
     # Mock the categories response for group names
     category_group = ynab.CategoryGroupWithCategories(
@@ -146,16 +141,12 @@ async def test_update_category_budget_success(
     assert category_data["activity"] == "-150"  # -$150.00
     assert category_data["balance"] == "50"  # $50.00
 
-    # Verify the API was called correctly
-    categories_api.update_month_category.assert_called_once()
-    call_args = categories_api.update_month_category.call_args[0]
-    assert call_args[0] == "test_budget_id"  # budget_id (from mock environment)
-    assert call_args[1].year == 2025  # current month (from date.today())
-    assert call_args[2] == "cat-groceries"  # category_id
-
-    # Verify the patch wrapper contains correct milliunits
-    patch_wrapper = call_args[3]
-    assert patch_wrapper.category.budgeted == 200_000  # $200.00 in milliunits
+    # Verify the repository was called correctly
+    mock_repository.update_month_category.assert_called_once()
+    call_args = mock_repository.update_month_category.call_args
+    assert call_args[0][0] == "cat-groceries"  # category_id
+    assert call_args[0][1].year == 2025  # current month (from date.today())
+    assert call_args[0][2] == 200_000  # budgeted_milliunits
 
 
 async def test_update_transaction_success(

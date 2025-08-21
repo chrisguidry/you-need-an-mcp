@@ -14,7 +14,7 @@ from mcp.types import TextContent
 
 
 async def test_list_scheduled_transactions_basic(
-    scheduled_transactions_api: MagicMock,
+    mock_repository: MagicMock,
     mcp_client: Client[FastMCPTransport],
 ) -> None:
     """Test basic scheduled transaction listing without filters."""
@@ -24,7 +24,7 @@ async def test_list_scheduled_transactions_basic(
         date_first=date(2024, 1, 1),
         date_next=date(2024, 2, 1),
         frequency="monthly",
-        amount=-120000,  # -$120.00 outflow
+        amount=-120_000,  # -$120.00 outflow
         memo="Netflix subscription",
         flag_color=ynab.TransactionFlagColor.RED,
         flag_name="Entertainment",
@@ -44,7 +44,7 @@ async def test_list_scheduled_transactions_basic(
         date_first=date(2024, 1, 15),
         date_next=date(2024, 1, 29),
         frequency="weekly",
-        amount=-5000,  # -$5.00 outflow
+        amount=-5_000,  # -$5.00 outflow
         memo="Weekly coffee",
         flag_color=None,
         flag_name=None,
@@ -65,7 +65,7 @@ async def test_list_scheduled_transactions_basic(
         date_first=date(2024, 1, 1),
         date_next=date(2024, 3, 1),
         frequency="monthly",
-        amount=-50000,
+        amount=-50_000,
         memo="Deleted subscription",
         flag_color=None,
         flag_name=None,
@@ -80,20 +80,12 @@ async def test_list_scheduled_transactions_basic(
         subtransactions=[],
     )
 
-    scheduled_transactions_response = ynab.ScheduledTransactionsResponse(
-        data=ynab.ScheduledTransactionsResponseData(
-            scheduled_transactions=[
-                st2,
-                st1,
-                st_deleted,
-            ],  # Out of order to test sorting
-            server_knowledge=0,
-        )
-    )
-
-    scheduled_transactions_api.get_scheduled_transactions.return_value = (
-        scheduled_transactions_response
-    )
+    # Mock repository to return scheduled transactions
+    mock_repository.get_scheduled_transactions.return_value = [
+        st2,
+        st1,
+        st_deleted,
+    ]
 
     result = await mcp_client.call_tool("list_scheduled_transactions", {})
 
@@ -125,7 +117,7 @@ async def test_list_scheduled_transactions_basic(
 
 
 async def test_list_scheduled_transactions_with_frequency_filter(
-    scheduled_transactions_api: MagicMock,
+    mock_repository: MagicMock,
     mcp_client: Client[FastMCPTransport],
 ) -> None:
     """Test scheduled transaction listing filtered by frequency."""
@@ -135,7 +127,7 @@ async def test_list_scheduled_transactions_with_frequency_filter(
         date_first=date(2024, 1, 1),
         date_next=date(2024, 2, 1),
         frequency="monthly",
-        amount=-100000,
+        amount=-100_000,
         memo="Monthly bill",
         flag_color=None,
         flag_name=None,
@@ -155,7 +147,7 @@ async def test_list_scheduled_transactions_with_frequency_filter(
         date_first=date(2024, 1, 8),
         date_next=date(2024, 1, 15),
         frequency="weekly",
-        amount=-2500,
+        amount=-2_500,
         memo="Weekly groceries",
         flag_color=None,
         flag_name=None,
@@ -170,16 +162,8 @@ async def test_list_scheduled_transactions_with_frequency_filter(
         subtransactions=[],
     )
 
-    scheduled_transactions_response = ynab.ScheduledTransactionsResponse(
-        data=ynab.ScheduledTransactionsResponseData(
-            scheduled_transactions=[st_monthly, st_weekly],
-            server_knowledge=0,
-        )
-    )
-
-    scheduled_transactions_api.get_scheduled_transactions.return_value = (
-        scheduled_transactions_response
-    )
+    # Mock repository to return scheduled transactions
+    mock_repository.get_scheduled_transactions.return_value = [st_monthly, st_weekly]
 
     # Test filtering by monthly frequency
     result = await mcp_client.call_tool(
@@ -206,7 +190,7 @@ async def test_list_scheduled_transactions_with_frequency_filter(
 
 
 async def test_list_scheduled_transactions_with_upcoming_days_filter(
-    scheduled_transactions_api: MagicMock,
+    mock_repository: MagicMock,
     mcp_client: Client[FastMCPTransport],
 ) -> None:
     """Test scheduled transaction listing filtered by upcoming days."""
@@ -217,7 +201,7 @@ async def test_list_scheduled_transactions_with_upcoming_days_filter(
         date_first=date(2024, 1, 1),
         date_next=date(2024, 1, 20),  # 5 days from "today" (2024-01-15)
         frequency="monthly",
-        amount=-50000,
+        amount=-50_000,
         memo="Due soon",
         flag_color=None,
         flag_name=None,
@@ -238,7 +222,7 @@ async def test_list_scheduled_transactions_with_upcoming_days_filter(
         date_first=date(2024, 1, 1),
         date_next=date(2024, 1, 30),  # 15 days from "today" (2024-01-15)
         frequency="monthly",
-        amount=-75000,
+        amount=-75_000,
         memo="Due later",
         flag_color=None,
         flag_name=None,
@@ -253,16 +237,8 @@ async def test_list_scheduled_transactions_with_upcoming_days_filter(
         subtransactions=[],
     )
 
-    scheduled_transactions_response = ynab.ScheduledTransactionsResponse(
-        data=ynab.ScheduledTransactionsResponseData(
-            scheduled_transactions=[st_soon, st_later],
-            server_knowledge=0,
-        )
-    )
-
-    scheduled_transactions_api.get_scheduled_transactions.return_value = (
-        scheduled_transactions_response
-    )
+    # Mock repository to return scheduled transactions
+    mock_repository.get_scheduled_transactions.return_value = [st_soon, st_later]
 
     # Mock datetime.now() to return a fixed date for testing
     from unittest.mock import patch
@@ -290,7 +266,7 @@ async def test_list_scheduled_transactions_with_upcoming_days_filter(
 
 
 async def test_list_scheduled_transactions_with_amount_filter(
-    scheduled_transactions_api: MagicMock,
+    mock_repository: MagicMock,
     mcp_client: Client[FastMCPTransport],
 ) -> None:
     """Test scheduled transaction listing filtered by amount range."""
@@ -300,7 +276,7 @@ async def test_list_scheduled_transactions_with_amount_filter(
         date_first=date(2024, 1, 1),
         date_next=date(2024, 2, 1),
         frequency="monthly",
-        amount=-1000,  # -$1.00
+        amount=-1_000,  # -$1.00
         memo="Small expense",
         flag_color=None,
         flag_name=None,
@@ -320,7 +296,7 @@ async def test_list_scheduled_transactions_with_amount_filter(
         date_first=date(2024, 1, 1),
         date_next=date(2024, 2, 1),
         frequency="monthly",
-        amount=-500000,  # -$500.00
+        amount=-500_000,  # -$500.00
         memo="Large expense",
         flag_color=None,
         flag_name=None,
@@ -335,16 +311,8 @@ async def test_list_scheduled_transactions_with_amount_filter(
         subtransactions=[],
     )
 
-    scheduled_transactions_response = ynab.ScheduledTransactionsResponse(
-        data=ynab.ScheduledTransactionsResponseData(
-            scheduled_transactions=[st_small, st_large],
-            server_knowledge=0,
-        )
-    )
-
-    scheduled_transactions_api.get_scheduled_transactions.return_value = (
-        scheduled_transactions_response
-    )
+    # Mock repository to return scheduled transactions
+    mock_repository.get_scheduled_transactions.return_value = [st_small, st_large]
 
     # Test filtering by minimum amount (expenses <= -$10, i.e., larger expenses)
     result = await mcp_client.call_tool(
@@ -364,7 +332,7 @@ async def test_list_scheduled_transactions_with_amount_filter(
 
 
 async def test_list_scheduled_transactions_with_account_filter(
-    scheduled_transactions_api: MagicMock,
+    mock_repository: MagicMock,
     mcp_client: Client[FastMCPTransport],
 ) -> None:
     """Test scheduled transaction listing filtered by account."""
@@ -374,7 +342,7 @@ async def test_list_scheduled_transactions_with_account_filter(
         date_first=date(2024, 1, 1),
         date_next=date(2024, 2, 1),
         frequency="monthly",
-        amount=-100000,
+        amount=-100_000,
         memo="Checking account expense",
         flag_color=None,
         flag_name=None,
@@ -394,7 +362,7 @@ async def test_list_scheduled_transactions_with_account_filter(
         date_first=date(2024, 1, 1),
         date_next=date(2024, 2, 1),
         frequency="monthly",
-        amount=-50000,
+        amount=-50_000,
         memo="Savings account expense",
         flag_color=None,
         flag_name=None,
@@ -409,16 +377,8 @@ async def test_list_scheduled_transactions_with_account_filter(
         subtransactions=[],
     )
 
-    scheduled_transactions_response = ynab.ScheduledTransactionsResponse(
-        data=ynab.ScheduledTransactionsResponseData(
-            scheduled_transactions=[st_checking, st_savings],
-            server_knowledge=0,
-        )
-    )
-
-    scheduled_transactions_api.get_scheduled_transactions.return_value = (
-        scheduled_transactions_response
-    )
+    # Mock repository to return scheduled transactions
+    mock_repository.get_scheduled_transactions.return_value = [st_checking, st_savings]
 
     # Test filtering by checking account
     result = await mcp_client.call_tool(
@@ -438,7 +398,7 @@ async def test_list_scheduled_transactions_with_account_filter(
 
 
 async def test_list_scheduled_transactions_with_category_filter(
-    scheduled_transactions_api: MagicMock,
+    mock_repository: MagicMock,
     mcp_client: Client[FastMCPTransport],
 ) -> None:
     """Test scheduled transaction listing filtered by category."""
@@ -448,7 +408,7 @@ async def test_list_scheduled_transactions_with_category_filter(
         date_first=date(2024, 1, 1),
         date_next=date(2024, 2, 1),
         frequency="monthly",
-        amount=-100000,
+        amount=-100_000,
         memo="Monthly bill",
         flag_color=None,
         flag_name=None,
@@ -468,7 +428,7 @@ async def test_list_scheduled_transactions_with_category_filter(
         date_first=date(2024, 1, 1),
         date_next=date(2024, 2, 1),
         frequency="monthly",
-        amount=-1500,
+        amount=-1_500,
         memo="Entertainment subscription",
         flag_color=None,
         flag_name=None,
@@ -483,16 +443,11 @@ async def test_list_scheduled_transactions_with_category_filter(
         subtransactions=[],
     )
 
-    scheduled_transactions_response = ynab.ScheduledTransactionsResponse(
-        data=ynab.ScheduledTransactionsResponseData(
-            scheduled_transactions=[st_bills, st_entertainment],
-            server_knowledge=0,
-        )
-    )
-
-    scheduled_transactions_api.get_scheduled_transactions.return_value = (
-        scheduled_transactions_response
-    )
+    # Mock repository to return scheduled transactions
+    mock_repository.get_scheduled_transactions.return_value = [
+        st_bills,
+        st_entertainment,
+    ]
 
     # Test filtering by bills category
     result = await mcp_client.call_tool(
@@ -512,7 +467,7 @@ async def test_list_scheduled_transactions_with_category_filter(
 
 
 async def test_list_scheduled_transactions_with_min_amount_filter(
-    scheduled_transactions_api: MagicMock,
+    mock_repository: MagicMock,
     mcp_client: Client[FastMCPTransport],
 ) -> None:
     """Test scheduled transaction listing filtered by minimum amount."""
@@ -522,7 +477,7 @@ async def test_list_scheduled_transactions_with_min_amount_filter(
         date_first=date(2024, 1, 1),
         date_next=date(2024, 2, 1),
         frequency="monthly",
-        amount=-1000,  # -$1.00
+        amount=-1_000,  # -$1.00
         memo="Small expense",
         flag_color=None,
         flag_name=None,
@@ -542,7 +497,7 @@ async def test_list_scheduled_transactions_with_min_amount_filter(
         date_first=date(2024, 1, 1),
         date_next=date(2024, 2, 1),
         frequency="monthly",
-        amount=-500000,  # -$500.00
+        amount=-500_000,  # -$500.00
         memo="Large expense",
         flag_color=None,
         flag_name=None,
@@ -557,16 +512,8 @@ async def test_list_scheduled_transactions_with_min_amount_filter(
         subtransactions=[],
     )
 
-    scheduled_transactions_response = ynab.ScheduledTransactionsResponse(
-        data=ynab.ScheduledTransactionsResponseData(
-            scheduled_transactions=[st_small, st_large],
-            server_knowledge=0,
-        )
-    )
-
-    scheduled_transactions_api.get_scheduled_transactions.return_value = (
-        scheduled_transactions_response
-    )
+    # Mock repository to return scheduled transactions
+    mock_repository.get_scheduled_transactions.return_value = [st_small, st_large]
 
     # Test filtering by minimum amount (only expenses >= -$5, excludes -$500)
     result = await mcp_client.call_tool(
@@ -586,7 +533,7 @@ async def test_list_scheduled_transactions_with_min_amount_filter(
 
 
 async def test_list_scheduled_transactions_with_payee_filter(
-    scheduled_transactions_api: MagicMock,
+    mock_repository: MagicMock,
     mcp_client: Client[FastMCPTransport],
 ) -> None:
     """Test scheduled transaction listing filtered by payee."""
@@ -596,7 +543,7 @@ async def test_list_scheduled_transactions_with_payee_filter(
         date_first=date(2024, 1, 1),
         date_next=date(2024, 2, 1),
         frequency="monthly",
-        amount=-1500,
+        amount=-1_500,
         memo="Netflix subscription",
         flag_color=None,
         flag_name=None,
@@ -616,7 +563,7 @@ async def test_list_scheduled_transactions_with_payee_filter(
         date_first=date(2024, 1, 1),
         date_next=date(2024, 2, 1),
         frequency="monthly",
-        amount=-1000,
+        amount=-1_000,
         memo="Spotify subscription",
         flag_color=None,
         flag_name=None,
@@ -631,16 +578,8 @@ async def test_list_scheduled_transactions_with_payee_filter(
         subtransactions=[],
     )
 
-    scheduled_transactions_response = ynab.ScheduledTransactionsResponse(
-        data=ynab.ScheduledTransactionsResponseData(
-            scheduled_transactions=[st_netflix, st_spotify],
-            server_knowledge=0,
-        )
-    )
-
-    scheduled_transactions_api.get_scheduled_transactions.return_value = (
-        scheduled_transactions_response
-    )
+    # Mock repository to return scheduled transactions
+    mock_repository.get_scheduled_transactions.return_value = [st_netflix, st_spotify]
 
     # Test filtering by Netflix payee
     result = await mcp_client.call_tool(
@@ -660,7 +599,7 @@ async def test_list_scheduled_transactions_with_payee_filter(
 
 
 async def test_list_scheduled_transactions_pagination(
-    scheduled_transactions_api: MagicMock,
+    mock_repository: MagicMock,
     mcp_client: Client[FastMCPTransport],
 ) -> None:
     """Test scheduled transaction listing with pagination."""
@@ -673,7 +612,7 @@ async def test_list_scheduled_transactions_pagination(
             date_first=date(2024, 1, 1),
             date_next=date(2024, 2, i + 1),  # Different next dates for sorting
             frequency="monthly",
-            amount=-10000 * (i + 1),
+            amount=-10_000 * (i + 1),
             memo=f"Transaction {i}",
             flag_color=None,
             flag_name=None,
@@ -689,16 +628,8 @@ async def test_list_scheduled_transactions_pagination(
         )
         scheduled_transactions.append(st)
 
-    scheduled_transactions_response = ynab.ScheduledTransactionsResponse(
-        data=ynab.ScheduledTransactionsResponseData(
-            scheduled_transactions=scheduled_transactions,
-            server_knowledge=0,
-        )
-    )
-
-    scheduled_transactions_api.get_scheduled_transactions.return_value = (
-        scheduled_transactions_response
-    )
+    # Mock repository to return scheduled transactions
+    mock_repository.get_scheduled_transactions.return_value = scheduled_transactions
 
     # Test first page with limit
     result = await mcp_client.call_tool(
@@ -734,7 +665,7 @@ async def test_list_scheduled_transactions_pagination(
 
 
 async def test_list_scheduled_transactions_with_subtransactions(
-    scheduled_transactions_api: MagicMock,
+    mock_repository: MagicMock,
     mcp_client: Client[FastMCPTransport],
 ) -> None:
     """Test scheduled transaction listing with split transactions (subtransactions)."""
@@ -743,7 +674,7 @@ async def test_list_scheduled_transactions_with_subtransactions(
     sub1 = ynab.ScheduledSubTransaction(
         id="sub-1",
         scheduled_transaction_id="st-split",
-        amount=-30000,  # -$30.00 for groceries
+        amount=-30_000,  # -$30.00 for groceries
         memo="Groceries portion",
         payee_id="payee-1",
         payee_name="Grocery Store",
@@ -756,7 +687,7 @@ async def test_list_scheduled_transactions_with_subtransactions(
     sub2 = ynab.ScheduledSubTransaction(
         id="sub-2",
         scheduled_transaction_id="st-split",
-        amount=-20000,  # -$20.00 for household
+        amount=-20_000,  # -$20.00 for household
         memo="Household portion",
         payee_id="payee-1",
         payee_name="Grocery Store",
@@ -771,7 +702,7 @@ async def test_list_scheduled_transactions_with_subtransactions(
         date_first=date(2024, 1, 1),
         date_next=date(2024, 2, 1),
         frequency="monthly",
-        amount=-50000,  # -$50.00 total (should equal sum of subtransactions)
+        amount=-50_000,  # -$50.00 total (should equal sum of subtransactions)
         memo="Split transaction",
         flag_color=None,
         flag_name=None,
@@ -786,16 +717,8 @@ async def test_list_scheduled_transactions_with_subtransactions(
         subtransactions=[sub1, sub2],
     )
 
-    scheduled_transactions_response = ynab.ScheduledTransactionsResponse(
-        data=ynab.ScheduledTransactionsResponseData(
-            scheduled_transactions=[st_split],
-            server_knowledge=0,
-        )
-    )
-
-    scheduled_transactions_api.get_scheduled_transactions.return_value = (
-        scheduled_transactions_response
-    )
+    # Mock repository to return scheduled transactions
+    mock_repository.get_scheduled_transactions.return_value = [st_split]
 
     result = await mcp_client.call_tool("list_scheduled_transactions", {})
 
@@ -826,7 +749,7 @@ async def test_list_scheduled_transactions_with_subtransactions(
 
 
 async def test_list_scheduled_transactions_with_deleted_subtransactions(
-    scheduled_transactions_api: MagicMock,
+    mock_repository: MagicMock,
     mcp_client: Client[FastMCPTransport],
 ) -> None:
     """Test scheduled transaction listing excludes deleted subtransactions."""
@@ -835,7 +758,7 @@ async def test_list_scheduled_transactions_with_deleted_subtransactions(
     sub_active = ynab.ScheduledSubTransaction(
         id="sub-active",
         scheduled_transaction_id="st-mixed",
-        amount=-30000,  # -$30.00
+        amount=-30_000,  # -$30.00
         memo="Active subtransaction",
         payee_id="payee-1",
         payee_name="Store",
@@ -848,7 +771,7 @@ async def test_list_scheduled_transactions_with_deleted_subtransactions(
     sub_deleted = ynab.ScheduledSubTransaction(
         id="sub-deleted",
         scheduled_transaction_id="st-mixed",
-        amount=-20000,  # -$20.00
+        amount=-20_000,  # -$20.00
         memo="Deleted subtransaction",
         payee_id="payee-1",
         payee_name="Store",
@@ -863,7 +786,7 @@ async def test_list_scheduled_transactions_with_deleted_subtransactions(
         date_first=date(2024, 1, 1),
         date_next=date(2024, 2, 1),
         frequency="monthly",
-        amount=-50000,  # -$50.00 total
+        amount=-50_000,  # -$50.00 total
         memo="Mixed subtransactions",
         flag_color=None,
         flag_name=None,
@@ -878,16 +801,8 @@ async def test_list_scheduled_transactions_with_deleted_subtransactions(
         subtransactions=[sub_active, sub_deleted],
     )
 
-    scheduled_transactions_response = ynab.ScheduledTransactionsResponse(
-        data=ynab.ScheduledTransactionsResponseData(
-            scheduled_transactions=[st_mixed],
-            server_knowledge=0,
-        )
-    )
-
-    scheduled_transactions_api.get_scheduled_transactions.return_value = (
-        scheduled_transactions_response
-    )
+    # Mock repository to return scheduled transactions
+    mock_repository.get_scheduled_transactions.return_value = [st_mixed]
 
     result = await mcp_client.call_tool("list_scheduled_transactions", {})
 

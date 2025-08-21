@@ -50,7 +50,7 @@ def create_ynab_transaction(
 
 
 async def test_list_transactions_basic(
-    transactions_api: MagicMock, mcp_client: Client[FastMCPTransport]
+    mock_repository: MagicMock, mcp_client: Client[FastMCPTransport]
 ) -> None:
     """Test basic transaction listing without filters."""
 
@@ -94,14 +94,8 @@ async def test_list_transactions_basic(
         deleted=True,  # Should be excluded
     )
 
-    transactions_response = ynab.TransactionsResponse(
-        data=ynab.TransactionsResponseData(
-            transactions=[txn2, txn1, txn_deleted],  # Out of order to test sorting
-            server_knowledge=0,
-        )
-    )
-
-    transactions_api.get_transactions.return_value = transactions_response
+    # Mock repository to return transactions
+    mock_repository.get_transactions.return_value = [txn2, txn1, txn_deleted]
 
     result = await mcp_client.call_tool("list_transactions", {})
 
@@ -130,41 +124,26 @@ async def test_list_transactions_basic(
 
 
 async def test_list_transactions_with_account_filter(
-    transactions_api: MagicMock,
+    mock_repository: MagicMock,
     mcp_client: Client[FastMCPTransport],
 ) -> None:
     """Test transaction listing filtered by account."""
     # Create transaction
-    txn = ynab.TransactionDetail(
+    txn = create_ynab_transaction(
         id="txn-acc-1",
         date=date(2024, 2, 1),
-        amount=-30000,
+        amount=-30_000,
         memo="Account filtered",
-        cleared=ynab.TransactionClearedStatus.CLEARED,
-        approved=True,
-        flag_color=None,
         account_id="acc-checking",
         account_name="Main Checking",
         payee_id="payee-1",
         payee_name="Store",
         category_id="cat-1",
         category_name="Shopping",
-        transfer_account_id=None,
-        transfer_transaction_id=None,
-        matched_transaction_id=None,
-        import_id=None,
-        import_payee_name=None,
-        import_payee_name_original=None,
-        debt_transaction_type=None,
-        deleted=False,
-        subtransactions=[],
     )
 
-    transactions_response = ynab.TransactionsResponse(
-        data=ynab.TransactionsResponseData(transactions=[txn], server_knowledge=0)
-    )
-
-    transactions_api.get_transactions_by_account.return_value = transactions_response
+    # Mock repository to return filtered transactions
+    mock_repository.get_transactions_by_filters.return_value = [txn]
 
     result = await mcp_client.call_tool(
         "list_transactions", {"account_id": "acc-checking"}
@@ -176,100 +155,56 @@ async def test_list_transactions_with_account_filter(
     assert len(response_data["transactions"]) == 1
     assert response_data["transactions"][0]["account_id"] == "acc-checking"
 
-    # Verify correct API method was called
-    transactions_api.get_transactions_by_account.assert_called_once()
-    args = transactions_api.get_transactions_by_account.call_args[0]
-    assert args[1] == "acc-checking"  # account_id parameter
+    # Verify correct repository method was called
+    mock_repository.get_transactions_by_filters.assert_called_once_with(
+        account_id="acc-checking",
+        category_id=None,
+        payee_id=None,
+        since_date=None,
+    )
 
 
 async def test_list_transactions_with_amount_filters(
-    transactions_api: MagicMock,
+    mock_repository: MagicMock,
     mcp_client: Client[FastMCPTransport],
 ) -> None:
     """Test transaction listing with amount range filters."""
     # Create transactions with different amounts
-    txn_small = ynab.TransactionDetail(
+    txn_small = create_ynab_transaction(
         id="txn-small",
         date=date(2024, 3, 1),
-        amount=-25000,  # -$25
+        amount=-25_000,  # -$25
         memo="Small purchase",
-        cleared=ynab.TransactionClearedStatus.CLEARED,
-        approved=True,
-        flag_color=None,
-        account_id="acc-1",
-        account_name="Checking",
         payee_id="payee-1",
         payee_name="Coffee Shop",
         category_id="cat-1",
         category_name="Dining Out",
-        transfer_account_id=None,
-        transfer_transaction_id=None,
-        matched_transaction_id=None,
-        import_id=None,
-        import_payee_name=None,
-        import_payee_name_original=None,
-        debt_transaction_type=None,
-        deleted=False,
-        subtransactions=[],
     )
 
-    txn_medium = ynab.TransactionDetail(
+    txn_medium = create_ynab_transaction(
         id="txn-medium",
         date=date(2024, 3, 2),
-        amount=-60000,  # -$60
+        amount=-60_000,  # -$60
         memo="Medium purchase",
-        cleared=ynab.TransactionClearedStatus.CLEARED,
-        approved=True,
-        flag_color=None,
-        account_id="acc-1",
-        account_name="Checking",
         payee_id="payee-2",
         payee_name="Restaurant",
         category_id="cat-1",
         category_name="Dining Out",
-        transfer_account_id=None,
-        transfer_transaction_id=None,
-        matched_transaction_id=None,
-        import_id=None,
-        import_payee_name=None,
-        import_payee_name_original=None,
-        debt_transaction_type=None,
-        deleted=False,
-        subtransactions=[],
     )
 
-    txn_large = ynab.TransactionDetail(
+    txn_large = create_ynab_transaction(
         id="txn-large",
         date=date(2024, 3, 3),
-        amount=-120000,  # -$120
+        amount=-120_000,  # -$120
         memo="Large purchase",
-        cleared=ynab.TransactionClearedStatus.CLEARED,
-        approved=True,
-        flag_color=None,
-        account_id="acc-1",
-        account_name="Checking",
         payee_id="payee-3",
         payee_name="Electronics Store",
         category_id="cat-2",
         category_name="Shopping",
-        transfer_account_id=None,
-        transfer_transaction_id=None,
-        matched_transaction_id=None,
-        import_id=None,
-        import_payee_name=None,
-        import_payee_name_original=None,
-        debt_transaction_type=None,
-        deleted=False,
-        subtransactions=[],
     )
 
-    transactions_response = ynab.TransactionsResponse(
-        data=ynab.TransactionsResponseData(
-            transactions=[txn_small, txn_medium, txn_large], server_knowledge=0
-        )
-    )
-
-    transactions_api.get_transactions.return_value = transactions_response
+    # Mock repository to return all transactions for filtering
+    mock_repository.get_transactions.return_value = [txn_small, txn_medium, txn_large]
 
     # Test with min_amount filter (transactions >= -$50)
     result = await mcp_client.call_tool(
@@ -316,13 +251,13 @@ async def test_list_transactions_with_amount_filters(
 
 
 async def test_list_transactions_with_subtransactions(
-    transactions_api: MagicMock, mcp_client: Client[FastMCPTransport]
+    mock_repository: MagicMock, mcp_client: Client[FastMCPTransport]
 ) -> None:
     """Test transaction listing with split transactions (subtransactions)."""
     sub1 = ynab.SubTransaction(
         id="sub-1",
         transaction_id="txn-split",
-        amount=-30000,  # -$30
+        amount=-30_000,  # -$30
         memo="Groceries portion",
         payee_id=None,
         payee_name=None,
@@ -336,7 +271,7 @@ async def test_list_transactions_with_subtransactions(
     sub2 = ynab.SubTransaction(
         id="sub-2",
         transaction_id="txn-split",
-        amount=-20000,  # -$20
+        amount=-20_000,  # -$20
         memo="Household items",
         payee_id=None,
         payee_name=None,
@@ -351,7 +286,7 @@ async def test_list_transactions_with_subtransactions(
     sub_deleted = ynab.SubTransaction(
         id="sub-deleted",
         transaction_id="txn-split",
-        amount=-10000,
+        amount=-10_000,
         memo="Deleted sub",
         payee_id=None,
         payee_name=None,
@@ -363,36 +298,20 @@ async def test_list_transactions_with_subtransactions(
     )
 
     # Create split transaction
-    txn_split = ynab.TransactionDetail(
+    txn_split = create_ynab_transaction(
         id="txn-split",
         date=date(2024, 4, 1),
-        amount=-50000,  # -$50 total
+        amount=-50_000,  # -$50 total
         memo="Split transaction at Target",
-        cleared=ynab.TransactionClearedStatus.CLEARED,
-        approved=True,
-        flag_color=None,
-        account_id="acc-1",
-        account_name="Checking",
         payee_id="payee-target",
         payee_name="Target",
         category_id=None,  # Split transactions don't have a single category
         category_name=None,
-        transfer_account_id=None,
-        transfer_transaction_id=None,
-        matched_transaction_id=None,
-        import_id=None,
-        import_payee_name=None,
-        import_payee_name_original=None,
-        debt_transaction_type=None,
-        deleted=False,
         subtransactions=[sub1, sub2, sub_deleted],
     )
 
-    transactions_response = ynab.TransactionsResponse(
-        data=ynab.TransactionsResponseData(transactions=[txn_split], server_knowledge=0)
-    )
-
-    transactions_api.get_transactions.return_value = transactions_response
+    # Mock repository to return split transaction
+    mock_repository.get_transactions.return_value = [txn_split]
 
     result = await mcp_client.call_tool("list_transactions", {})
 
@@ -415,45 +334,26 @@ async def test_list_transactions_with_subtransactions(
 
 
 async def test_list_transactions_pagination(
-    transactions_api: MagicMock, mcp_client: Client[FastMCPTransport]
+    mock_repository: MagicMock, mcp_client: Client[FastMCPTransport]
 ) -> None:
     """Test transaction listing with pagination."""
     # Create many transactions to test pagination
     transactions = []
     for i in range(5):
-        txn = ynab.TransactionDetail(
+        txn = create_ynab_transaction(
             id=f"txn-{i}",
             date=date(2024, 1, i + 1),
-            amount=-10000 * (i + 1),
+            amount=-10_000 * (i + 1),
             memo=f"Transaction {i}",
-            cleared=ynab.TransactionClearedStatus.CLEARED,
-            approved=True,
-            flag_color=None,
-            account_id="acc-1",
-            account_name="Checking",
             payee_id=f"payee-{i}",
             payee_name=f"Store {i}",
             category_id="cat-1",
             category_name="Shopping",
-            transfer_account_id=None,
-            transfer_transaction_id=None,
-            matched_transaction_id=None,
-            import_id=None,
-            import_payee_name=None,
-            import_payee_name_original=None,
-            debt_transaction_type=None,
-            deleted=False,
-            subtransactions=[],
         )
         transactions.append(txn)
 
-    transactions_response = ynab.TransactionsResponse(
-        data=ynab.TransactionsResponseData(
-            transactions=transactions, server_knowledge=0
-        )
-    )
-
-    transactions_api.get_transactions.return_value = transactions_response
+    # Mock repository to return all transactions
+    mock_repository.get_transactions.return_value = transactions
 
     # Test first page
     result = await mcp_client.call_tool("list_transactions", {"limit": 2, "offset": 0})
@@ -479,42 +379,25 @@ async def test_list_transactions_pagination(
 
 
 async def test_list_transactions_with_category_filter(
-    transactions_api: MagicMock,
+    mock_repository: MagicMock,
     mcp_client: Client[FastMCPTransport],
 ) -> None:
     """Test transaction listing filtered by category."""
 
     # Create transaction
-    txn = ynab.TransactionDetail(
+    txn = create_ynab_transaction(
         id="txn-cat-1",
         date=date(2024, 2, 1),
-        amount=-40000,
+        amount=-40_000,
         memo="Category filtered",
-        cleared=ynab.TransactionClearedStatus.CLEARED,
-        approved=True,
-        flag_color=None,
-        account_id="acc-1",
-        account_name="Checking",
         payee_id="payee-1",
         payee_name="Store",
         category_id="cat-dining",
         category_name="Dining Out",
-        transfer_account_id=None,
-        transfer_transaction_id=None,
-        matched_transaction_id=None,
-        import_id=None,
-        import_payee_name=None,
-        import_payee_name_original=None,
-        debt_transaction_type=None,
-        deleted=False,
-        subtransactions=[],
     )
 
-    transactions_response = ynab.TransactionsResponse(
-        data=ynab.TransactionsResponseData(transactions=[txn], server_knowledge=0)
-    )
-
-    transactions_api.get_transactions_by_category.return_value = transactions_response
+    # Mock repository to return filtered transactions
+    mock_repository.get_transactions_by_filters.return_value = [txn]
 
     result = await mcp_client.call_tool(
         "list_transactions", {"category_id": "cat-dining"}
@@ -526,48 +409,34 @@ async def test_list_transactions_with_category_filter(
     assert len(response_data["transactions"]) == 1
     assert response_data["transactions"][0]["category_id"] == "cat-dining"
 
-    # Verify correct API method was called
-    transactions_api.get_transactions_by_category.assert_called_once()
-    args = transactions_api.get_transactions_by_category.call_args[0]
-    assert args[1] == "cat-dining"  # category_id parameter
+    # Verify correct repository method was called
+    mock_repository.get_transactions_by_filters.assert_called_once_with(
+        account_id=None,
+        category_id="cat-dining",
+        payee_id=None,
+        since_date=None,
+    )
 
 
 async def test_list_transactions_with_payee_filter(
-    transactions_api: MagicMock,
+    mock_repository: MagicMock,
     mcp_client: Client[FastMCPTransport],
 ) -> None:
     """Test transaction listing filtered by payee."""
     # Create transaction
-    txn = ynab.TransactionDetail(
+    txn = create_ynab_transaction(
         id="txn-payee-1",
         date=date(2024, 3, 1),
-        amount=-80000,
+        amount=-80_000,
         memo="Payee filtered",
-        cleared=ynab.TransactionClearedStatus.CLEARED,
-        approved=True,
-        flag_color=None,
-        account_id="acc-1",
-        account_name="Checking",
         payee_id="payee-amazon",
         payee_name="Amazon",
         category_id="cat-shopping",
         category_name="Shopping",
-        transfer_account_id=None,
-        transfer_transaction_id=None,
-        matched_transaction_id=None,
-        import_id=None,
-        import_payee_name=None,
-        import_payee_name_original=None,
-        debt_transaction_type=None,
-        deleted=False,
-        subtransactions=[],
     )
 
-    transactions_response = ynab.TransactionsResponse(
-        data=ynab.TransactionsResponseData(transactions=[txn], server_knowledge=0)
-    )
-
-    transactions_api.get_transactions_by_payee.return_value = transactions_response
+    # Mock repository to return filtered transactions
+    mock_repository.get_transactions_by_filters.return_value = [txn]
 
     result = await mcp_client.call_tool(
         "list_transactions", {"payee_id": "payee-amazon"}
@@ -579,7 +448,10 @@ async def test_list_transactions_with_payee_filter(
     assert len(response_data["transactions"]) == 1
     assert response_data["transactions"][0]["payee_id"] == "payee-amazon"
 
-    # Verify correct API method was called
-    transactions_api.get_transactions_by_payee.assert_called_once()
-    args = transactions_api.get_transactions_by_payee.call_args[0]
-    assert args[1] == "payee-amazon"  # payee_id parameter
+    # Verify correct repository method was called
+    mock_repository.get_transactions_by_filters.assert_called_once_with(
+        account_id=None,
+        category_id=None,
+        payee_id="payee-amazon",
+        since_date=None,
+    )

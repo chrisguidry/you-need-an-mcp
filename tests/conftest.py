@@ -64,15 +64,6 @@ def transactions_api(ynab_client: MagicMock) -> Generator[MagicMock, None, None]
 
 
 @pytest.fixture
-def scheduled_transactions_api(
-    ynab_client: MagicMock,
-) -> Generator[MagicMock, None, None]:
-    mock_api = Mock(spec=ynab.ScheduledTransactionsApi)
-    with patch("ynab.ScheduledTransactionsApi", return_value=mock_api):
-        yield mock_api
-
-
-@pytest.fixture
 async def mcp_client() -> AsyncGenerator[Client[FastMCPTransport], None]:
     """Mock MCP client with proper autospec for testing."""
     async with fastmcp.Client(server.mcp) as client:

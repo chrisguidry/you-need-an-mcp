@@ -1,7 +1,7 @@
 import os
 from datetime import date, datetime
 from decimal import Decimal
-from typing import Literal, cast
+from typing import Literal
 
 import ynab
 from fastmcp import FastMCP
@@ -250,38 +250,32 @@ def get_budget_month(
     Returns:
         BudgetMonth with month info, categories, and pagination
     """
-    with ynab.ApiClient(ynab_api_configuration) as api_client:
-        months_api = ynab.MonthsApi(api_client)
-        converted_month = convert_month_to_date(month)
-        month_response = months_api.get_budget_month(BUDGET_ID, converted_month)
+    converted_month = convert_month_to_date(month)
+    month_data = _repository.get_budget_month(converted_month)
 
-        # Map category IDs to group names
-        category_groups = _repository.get_category_groups()
-        category_group_map = _build_category_group_map(category_groups)
+    # Map category IDs to group names
+    category_groups = _repository.get_category_groups()
+    category_group_map = _build_category_group_map(category_groups)
+    all_categories = []
 
-        month_data = month_response.data.month
-        all_categories = []
+    active_categories = _filter_active_items(month_data.categories, exclude_hidden=True)
+    for category in active_categories:
+        group_name = category_group_map.get(category.id)
+        all_categories.append(Category.from_ynab(category, group_name))
 
-        active_categories = _filter_active_items(
-            month_data.categories, exclude_hidden=True
-        )
-        for category in active_categories:
-            group_name = category_group_map.get(category.id)
-            all_categories.append(Category.from_ynab(category, group_name))
+    categories_page, pagination = _paginate_items(all_categories, limit, offset)
 
-        categories_page, pagination = _paginate_items(all_categories, limit, offset)
-
-        return BudgetMonth(
-            month=month_data.month,
-            note=month_data.note,
-            income=milliunits_to_currency(month_data.income),
-            budgeted=milliunits_to_currency(month_data.budgeted),
-            activity=milliunits_to_currency(month_data.activity),
-            to_be_budgeted=milliunits_to_currency(month_data.to_be_budgeted),
-            age_of_money=month_data.age_of_money,
-            categories=categories_page,
-            pagination=pagination,
-        )
+    return BudgetMonth(
+        month=month_data.month,
+        note=month_data.note,
+        income=milliunits_to_currency(month_data.income),
+        budgeted=milliunits_to_currency(month_data.budgeted),
+        activity=milliunits_to_currency(month_data.activity),
+        to_be_budgeted=milliunits_to_currency(month_data.to_be_budgeted),
+        age_of_money=month_data.age_of_money,
+        categories=categories_page,
+        pagination=pagination,
+    )
 
 
 @mcp.tool()
@@ -303,21 +297,15 @@ def get_month_category_by_id(
     Returns:
         Category with budget data for the specified month
     """
-    with ynab.ApiClient(ynab_api_configuration) as api_client:
-        categories_api = ynab.CategoriesApi(api_client)
-        converted_month = convert_month_to_date(month)
-        category_response = categories_api.get_month_category_by_id(
-            BUDGET_ID, converted_month, category_id
-        )
+    converted_month = convert_month_to_date(month)
+    category = _repository.get_month_category_by_id(converted_month, category_id)
 
-        category = category_response.data.category
+    # Fetch category groups to get group name
+    category_groups = _repository.get_category_groups()
+    category_group_map = _build_category_group_map(category_groups)
+    group_name = category_group_map.get(category_id)
 
-        # Fetch category groups to get group name
-        category_groups = _repository.get_category_groups()
-        category_group_map = _build_category_group_map(category_groups)
-        group_name = category_group_map.get(category_id)
-
-        return Category.from_ynab(category, group_name)
+    return Category.from_ynab(category, group_name)
 
 
 @mcp.tool()
@@ -367,66 +355,44 @@ def list_transactions(
     Returns:
         TransactionsResponse with filtered transactions and pagination info
     """
-    with ynab.ApiClient(ynab_api_configuration) as api_client:
-        transactions_api = ynab.TransactionsApi(api_client)
-
-        # Determine which API method to use based on filters
-        response: ynab.TransactionsResponse | ynab.HybridTransactionsResponse
-        if account_id:
-            # Use account-specific endpoint if account filter is provided
-            response = transactions_api.get_transactions_by_account(
-                BUDGET_ID,
-                account_id,
-                since_date=since_date,
-                type=None,  # Include all transaction types
-            )
-        elif category_id:
-            # Use category-specific endpoint if category filter is provided
-            response = transactions_api.get_transactions_by_category(
-                BUDGET_ID, category_id, since_date=since_date, type=None
-            )
-        elif payee_id:
-            # Use payee-specific endpoint if payee filter is provided
-            response = transactions_api.get_transactions_by_payee(
-                BUDGET_ID, payee_id, since_date=since_date, type=None
-            )
-        else:
-            # Use general transactions endpoint
-            response = transactions_api.get_transactions(
-                BUDGET_ID, since_date=since_date, type=None
-            )
-
-        transactions_data: list[ynab.TransactionDetail | ynab.HybridTransaction] = cast(
-            list[ynab.TransactionDetail | ynab.HybridTransaction],
-            response.data.transactions,
+    # Use repository to get transactions with appropriate filtering
+    if account_id or category_id or payee_id or since_date:
+        # Use filtered endpoint for specific filters
+        transactions_data = _repository.get_transactions_by_filters(
+            account_id=account_id,
+            category_id=category_id,
+            payee_id=payee_id,
+            since_date=since_date,
         )
-        active_transactions = _filter_active_items(transactions_data)
-        all_transactions = []
-        for txn in active_transactions:
-            # Apply amount filters (check milliunits directly for efficiency)
-            if (
-                min_amount is not None
-                and txn.amount is not None
-                and txn.amount < (min_amount * 1000)
-            ):
-                continue
-            if (
-                max_amount is not None
-                and txn.amount is not None
-                and txn.amount > (max_amount * 1000)
-            ):
-                continue
+    else:
+        # Use cached transactions for general queries
+        transactions_data = _repository.get_transactions()
 
-            all_transactions.append(Transaction.from_ynab(txn))
+    active_transactions = _filter_active_items(transactions_data)
+    all_transactions = []
+    for txn in active_transactions:
+        # Apply amount filters (check milliunits directly for efficiency)
+        if (
+            min_amount is not None
+            and txn.amount is not None
+            and txn.amount < (min_amount * 1000)
+        ):
+            continue
+        if (
+            max_amount is not None
+            and txn.amount is not None
+            and txn.amount > (max_amount * 1000)
+        ):
+            continue
 
-        # Sort by date descending (most recent first)
-        all_transactions.sort(key=lambda t: t.date, reverse=True)
+        all_transactions.append(Transaction.from_ynab(txn))
 
-        transactions_page, pagination = _paginate_items(all_transactions, limit, offset)
+    # Sort by date descending (most recent first)
+    all_transactions.sort(key=lambda t: t.date, reverse=True)
 
-        return TransactionsResponse(
-            transactions=transactions_page, pagination=pagination
-        )
+    transactions_page, pagination = _paginate_items(all_transactions, limit, offset)
+
+    return TransactionsResponse(transactions=transactions_page, pagination=pagination)
 
 
 @mcp.tool()
@@ -574,49 +540,44 @@ def list_scheduled_transactions(
         ScheduledTransactionsResponse with filtered scheduled transactions and
         pagination info
     """
-    with ynab.ApiClient(ynab_api_configuration) as api_client:
-        scheduled_transactions_api = ynab.ScheduledTransactionsApi(api_client)
-        response = scheduled_transactions_api.get_scheduled_transactions(BUDGET_ID)
+    scheduled_transactions_data = _repository.get_scheduled_transactions()
+    active_scheduled_transactions = _filter_active_items(scheduled_transactions_data)
+    all_scheduled_transactions = []
+    for st in active_scheduled_transactions:
+        # Apply filters
+        if account_id and st.account_id != account_id:
+            continue
+        if category_id and st.category_id != category_id:
+            continue
+        if payee_id and st.payee_id != payee_id:
+            continue
+        if frequency and st.frequency != frequency:
+            continue
 
-        active_scheduled_transactions = _filter_active_items(
-            response.data.scheduled_transactions
-        )
-        all_scheduled_transactions = []
-        for st in active_scheduled_transactions:
-            # Apply filters
-            if account_id and st.account_id != account_id:
-                continue
-            if category_id and st.category_id != category_id:
-                continue
-            if payee_id and st.payee_id != payee_id:
-                continue
-            if frequency and st.frequency != frequency:
-                continue
-
-            # Apply upcoming_days filter
-            if upcoming_days is not None:
-                days_until_next = (st.date_next - datetime.now().date()).days
-                if days_until_next > upcoming_days:
-                    continue
-
-            # Apply amount filters (check milliunits directly for efficiency)
-            if min_amount is not None and st.amount < (min_amount * 1000):
-                continue
-            if max_amount is not None and st.amount > (max_amount * 1000):
+        # Apply upcoming_days filter
+        if upcoming_days is not None:
+            days_until_next = (st.date_next - datetime.now().date()).days
+            if days_until_next > upcoming_days:
                 continue
 
-            all_scheduled_transactions.append(ScheduledTransaction.from_ynab(st))
+        # Apply amount filters (check milliunits directly for efficiency)
+        if min_amount is not None and st.amount < (min_amount * 1000):
+            continue
+        if max_amount is not None and st.amount > (max_amount * 1000):
+            continue
 
-        # Sort by next date ascending (earliest scheduled first)
-        all_scheduled_transactions.sort(key=lambda st: st.date_next)
+        all_scheduled_transactions.append(ScheduledTransaction.from_ynab(st))
 
-        scheduled_transactions_page, pagination = _paginate_items(
-            all_scheduled_transactions, limit, offset
-        )
+    # Sort by next date ascending (earliest scheduled first)
+    all_scheduled_transactions.sort(key=lambda st: st.date_next)
 
-        return ScheduledTransactionsResponse(
-            scheduled_transactions=scheduled_transactions_page, pagination=pagination
-        )
+    scheduled_transactions_page, pagination = _paginate_items(
+        all_scheduled_transactions, limit, offset
+    )
+
+    return ScheduledTransactionsResponse(
+        scheduled_transactions=scheduled_transactions_page, pagination=pagination
+    )
 
 
 @mcp.tool()
@@ -647,25 +608,22 @@ def update_category_budget(
     Returns:
         Category with updated budget information
     """
-    with ynab.ApiClient(ynab_api_configuration) as api_client:
-        categories_api = ynab.CategoriesApi(api_client)
-        converted_month = convert_month_to_date(month)
+    converted_month = convert_month_to_date(month)
 
-        # Convert currency units to milliunits and create patch
-        budgeted_milliunits = int(budgeted * 1000)
-        save_month_category = ynab.SaveMonthCategory(budgeted=budgeted_milliunits)
-        patch_wrapper = ynab.PatchMonthCategoryWrapper(category=save_month_category)
+    # Convert currency units to milliunits
+    budgeted_milliunits = int(budgeted * 1000)
 
-        response = categories_api.update_month_category(
-            BUDGET_ID, converted_month, category_id, patch_wrapper
-        )
+    # Use repository update method with cache invalidation
+    updated_category = _repository.update_month_category(
+        category_id, converted_month, budgeted_milliunits
+    )
 
-        # Get category group name for the response
-        category_groups = _repository.get_category_groups()
-        category_group_map = _build_category_group_map(category_groups)
-        group_name = category_group_map.get(category_id)
+    # Get category group name for the response
+    category_groups = _repository.get_category_groups()
+    category_group_map = _build_category_group_map(category_groups)
+    group_name = category_group_map.get(category_id)
 
-        return Category.from_ynab(response.data.category, group_name)
+    return Category.from_ynab(updated_category, group_name)
 
 
 @mcp.tool()
@@ -689,55 +647,33 @@ def update_transaction(
     Returns:
         Transaction with updated information
     """
-    with ynab.ApiClient(ynab_api_configuration) as api_client:
-        transactions_api = ynab.TransactionsApi(api_client)
+    # First, get the existing transaction to preserve its current values
+    existing_txn = _repository.get_transaction_by_id(transaction_id)
 
-        # First, get the existing transaction to preserve its current values
-        existing_response = transactions_api.get_transaction_by_id(
-            BUDGET_ID, transaction_id
-        )
-        existing_txn = existing_response.data.transaction
+    # Build the update data starting with existing transaction values
+    update_data = {
+        "account_id": existing_txn.account_id,
+        "date": existing_txn.var_date,  # ExistingTransaction uses 'date'
+        "amount": existing_txn.amount,
+        "payee_id": existing_txn.payee_id,
+        "payee_name": existing_txn.payee_name,
+        "category_id": existing_txn.category_id,
+        "memo": existing_txn.memo,
+        "cleared": existing_txn.cleared,
+        "approved": existing_txn.approved,
+        "flag_color": existing_txn.flag_color,
+        "subtransactions": existing_txn.subtransactions,
+    }
 
-        # Build the update data starting with existing transaction values
-        update_data = {
-            "account_id": existing_txn.account_id,
-            "date": existing_txn.var_date,  # ExistingTransaction uses 'date'
-            "amount": existing_txn.amount,
-            "payee_id": existing_txn.payee_id,
-            "payee_name": existing_txn.payee_name,
-            "category_id": existing_txn.category_id,
-            "memo": existing_txn.memo,
-            "cleared": existing_txn.cleared,
-            "approved": existing_txn.approved,
-            "flag_color": existing_txn.flag_color,
-            "subtransactions": existing_txn.subtransactions,
-        }
+    # Apply only the fields we want to change
+    if category_id is not None:
+        update_data["category_id"] = category_id
+    if payee_id is not None:
+        update_data["payee_id"] = payee_id
+    if memo is not None:
+        update_data["memo"] = memo
 
-        # Apply only the fields we want to change
-        if category_id is not None:
-            update_data["category_id"] = category_id
-        if payee_id is not None:
-            update_data["payee_id"] = payee_id
-        if memo is not None:
-            update_data["memo"] = memo
+    # Use repository update method with cache invalidation
+    updated_transaction = _repository.update_transaction(transaction_id, update_data)
 
-        existing_transaction = ynab.ExistingTransaction(
-            account_id=update_data["account_id"],  # type: ignore[arg-type]
-            date=update_data["date"],  # type: ignore[arg-type]
-            amount=update_data["amount"],  # type: ignore[arg-type]
-            payee_id=update_data["payee_id"],  # type: ignore[arg-type]
-            payee_name=update_data["payee_name"],  # type: ignore[arg-type]
-            category_id=update_data["category_id"],  # type: ignore[arg-type]
-            memo=update_data["memo"],  # type: ignore[arg-type]
-            cleared=update_data["cleared"],  # type: ignore[arg-type]
-            approved=update_data["approved"],  # type: ignore[arg-type]
-            flag_color=update_data["flag_color"],  # type: ignore[arg-type]
-            subtransactions=update_data["subtransactions"],  # type: ignore[arg-type]
-        )
-        put_wrapper = ynab.PutTransactionWrapper(transaction=existing_transaction)
-
-        response = transactions_api.update_transaction(
-            BUDGET_ID, transaction_id, put_wrapper
-        )
-
-        return Transaction.from_ynab(response.data.transaction)
+    return Transaction.from_ynab(updated_transaction)

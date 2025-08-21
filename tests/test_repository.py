@@ -5,7 +5,7 @@ Tests the repository pattern implementation including initial sync, delta sync,
 and error handling scenarios.
 """
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any
 from unittest.mock import MagicMock, patch
 
@@ -604,3 +604,193 @@ def test_repository_category_groups_lazy_initialization(
     # Verify data is available
     assert len(category_groups) == 1
     assert category_groups[0].id == "group-1"
+
+
+def create_ynab_transaction(
+    *,
+    id: str = "txn-1",
+    account_id: str = "acc-1",
+    amount: int = -50_000,  # -$50.00
+    memo: str | None = "Test Transaction",
+    cleared: str = "cleared",
+    approved: bool = True,
+    deleted: bool = False,
+    **kwargs: Any,
+) -> ynab.TransactionDetail:
+    """Create a YNAB TransactionDetail for testing with sensible defaults."""
+    return ynab.TransactionDetail(
+        id=id,
+        date=kwargs.get("date", date.today()),
+        amount=amount,
+        memo=memo,
+        cleared=ynab.TransactionClearedStatus(cleared),
+        approved=approved,
+        flag_color=kwargs.get("flag_color"),
+        account_id=account_id,
+        account_name=kwargs.get("account_name", "Test Account"),
+        payee_id=kwargs.get("payee_id"),
+        payee_name=kwargs.get("payee_name", "Test Payee"),
+        category_id=kwargs.get("category_id"),
+        category_name=kwargs.get("category_name"),
+        transfer_account_id=kwargs.get("transfer_account_id"),
+        transfer_transaction_id=kwargs.get("transfer_transaction_id"),
+        matched_transaction_id=kwargs.get("matched_transaction_id"),
+        import_id=kwargs.get("import_id"),
+        import_payee_name=kwargs.get("import_payee_name"),
+        import_payee_name_original=kwargs.get("import_payee_name_original"),
+        debt_transaction_type=kwargs.get("debt_transaction_type"),
+        subtransactions=kwargs.get("subtransactions", []),
+        deleted=deleted,
+    )
+
+
+def test_repository_transactions_initial_sync(repository: YNABRepository) -> None:
+    """Test repository initial sync for transactions without server knowledge."""
+    txn1 = create_ynab_transaction(id="txn-1", amount=-25_000, memo="Groceries")
+    txn2 = create_ynab_transaction(id="txn-2", amount=-15_000, memo="Gas")
+
+    transactions_response = ynab.TransactionsResponse(
+        data=ynab.TransactionsResponseData(
+            transactions=[txn1, txn2], server_knowledge=100
+        )
+    )
+
+    with patch("ynab.ApiClient") as mock_client_class:
+        mock_client = MagicMock()
+        mock_client_class.return_value.__enter__.return_value = mock_client
+
+        mock_transactions_api = MagicMock()
+        mock_transactions_api.get_transactions.return_value = transactions_response
+
+        with patch("ynab.TransactionsApi", return_value=mock_transactions_api):
+            repository.sync_transactions()
+
+    # Verify initial sync called without last_knowledge_of_server
+    mock_transactions_api.get_transactions.assert_called_once_with("test-budget")
+
+    # Verify data was stored
+    transactions = repository.get_transactions()
+    assert len(transactions) == 2
+    assert transactions[0].id == "txn-1"
+    assert transactions[1].id == "txn-2"
+
+    # Verify server knowledge was stored
+    assert repository._server_knowledge["transactions"] == 100
+
+
+def test_repository_transactions_delta_sync(repository: YNABRepository) -> None:
+    """Test repository delta sync for transactions with server knowledge."""
+    # Set up initial state
+    txn1 = create_ynab_transaction(id="txn-1", amount=-25_000, memo="Groceries")
+    repository._data["transactions"] = [txn1]
+    repository._server_knowledge["transactions"] = 100
+    repository._last_sync = datetime.now()
+
+    # Delta sync with updated transaction and new transaction
+    updated_txn1 = create_ynab_transaction(
+        id="txn-1", amount=-25_000, memo="Groceries (Updated)"
+    )
+    new_txn = create_ynab_transaction(id="txn-2", amount=-15_000, memo="Gas")
+
+    delta_response = ynab.TransactionsResponse(
+        data=ynab.TransactionsResponseData(
+            transactions=[updated_txn1, new_txn], server_knowledge=110
+        )
+    )
+
+    with patch("ynab.ApiClient") as mock_client_class:
+        mock_client = MagicMock()
+        mock_client_class.return_value.__enter__.return_value = mock_client
+
+        mock_transactions_api = MagicMock()
+        mock_transactions_api.get_transactions.return_value = delta_response
+
+        with patch("ynab.TransactionsApi", return_value=mock_transactions_api):
+            repository.sync_transactions()
+
+    # Verify delta sync called with last_knowledge_of_server
+    mock_transactions_api.get_transactions.assert_called_once_with(
+        "test-budget", last_knowledge_of_server=100
+    )
+
+    # Verify deltas were applied
+    transactions = repository.get_transactions()
+    assert len(transactions) == 2
+
+    # Find transactions by ID
+    t1 = next(t for t in transactions if t.id == "txn-1")
+    t2 = next(t for t in transactions if t.id == "txn-2")
+
+    assert t1.memo == "Groceries (Updated)"  # Updated
+    assert t2.memo == "Gas"  # Added
+
+    # Verify server knowledge was updated
+    assert repository._server_knowledge["transactions"] == 110
+
+
+def test_repository_transactions_handles_deleted(repository: YNABRepository) -> None:
+    """Test repository handles deleted transactions in delta sync."""
+    # Set up initial state with two transactions
+    txn1 = create_ynab_transaction(id="txn-1", amount=-25_000, memo="Groceries")
+    txn2 = create_ynab_transaction(id="txn-2", amount=-15_000, memo="Gas")
+    repository._data["transactions"] = [txn1, txn2]
+    repository._server_knowledge["transactions"] = 100
+    repository._last_sync = datetime.now()
+
+    # Delta with one deleted transaction
+    deleted_txn = create_ynab_transaction(
+        id="txn-2", amount=-15_000, memo="Gas", deleted=True
+    )
+
+    delta_response = ynab.TransactionsResponse(
+        data=ynab.TransactionsResponseData(
+            transactions=[deleted_txn], server_knowledge=110
+        )
+    )
+
+    with patch("ynab.ApiClient") as mock_client_class:
+        mock_client = MagicMock()
+        mock_client_class.return_value.__enter__.return_value = mock_client
+
+        mock_transactions_api = MagicMock()
+        mock_transactions_api.get_transactions.return_value = delta_response
+
+        with patch("ynab.TransactionsApi", return_value=mock_transactions_api):
+            repository.sync_transactions()
+
+    # Verify deleted transaction was removed
+    transactions = repository.get_transactions()
+    assert len(transactions) == 1
+    assert transactions[0].id == "txn-1"  # Only groceries transaction remains
+
+
+def test_repository_transactions_lazy_initialization(
+    repository: YNABRepository,
+) -> None:
+    """Test transactions repository initializes automatically when data requested."""
+    txn1 = create_ynab_transaction(id="txn-1", amount=-25_000, memo="Groceries")
+
+    transactions_response = ynab.TransactionsResponse(
+        data=ynab.TransactionsResponseData(transactions=[txn1], server_knowledge=100)
+    )
+
+    with patch("ynab.ApiClient") as mock_client_class:
+        mock_client = MagicMock()
+        mock_client_class.return_value.__enter__.return_value = mock_client
+
+        mock_transactions_api = MagicMock()
+        mock_transactions_api.get_transactions.return_value = transactions_response
+
+        with patch("ynab.TransactionsApi", return_value=mock_transactions_api):
+            # Repository transactions is not initialized initially
+            assert "transactions" not in repository._data
+
+            # Calling get_transactions should trigger sync
+            transactions = repository.get_transactions()
+
+    # Verify sync was called
+    mock_transactions_api.get_transactions.assert_called_once()
+
+    # Verify data is available
+    assert len(transactions) == 1
+    assert transactions[0].id == "txn-1"

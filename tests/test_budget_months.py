@@ -57,10 +57,8 @@ async def test_get_budget_month_success(
         categories=[category],
     )
 
-    month_response = ynab.MonthDetailResponse(
-        data=ynab.MonthDetailResponseData(month=month)
-    )
-    months_api.get_budget_month.return_value = month_response
+    # Mock repository methods
+    mock_repository.get_budget_month.return_value = month
 
     # Mock the categories API call for getting group names
     category_group = ynab.CategoryGroupWithCategories(
@@ -121,11 +119,8 @@ async def test_get_month_category_by_id_success(
         deleted=False,
     )
 
-    category_response = ynab.CategoryResponse(
-        data=ynab.CategoryResponseData(category=mock_category)
-    )
-
-    categories_api.get_month_category_by_id.return_value = category_response
+    # Mock repository method
+    mock_repository.get_month_category_by_id.return_value = mock_category
 
     # Mock the categories API call for getting group names
     category_group = ynab.CategoryGroupWithCategories(
@@ -186,11 +181,8 @@ async def test_get_month_category_by_id_default_budget(
         deleted=False,
     )
 
-    category_response = ynab.CategoryResponse(
-        data=ynab.CategoryResponseData(category=mock_category)
-    )
-
-    categories_api.get_month_category_by_id.return_value = category_response
+    # Mock repository method
+    mock_repository.get_month_category_by_id.return_value = mock_category
 
     # Mock the categories API call for getting group names
     category_group = ynab.CategoryGroupWithCategories(
@@ -251,10 +243,8 @@ async def test_get_month_category_by_id_no_groups(
         deleted=False,
     )
 
-    category_response = ynab.CategoryResponse(
-        data=ynab.CategoryResponseData(category=mock_category)
-    )
-    categories_api.get_month_category_by_id.return_value = category_response
+    # Mock repository method
+    mock_repository.get_month_category_by_id.return_value = mock_category
 
     # Mock empty category groups response
     mock_repository.get_category_groups.return_value = []
@@ -360,10 +350,8 @@ async def test_get_month_category_by_id_category_not_in_groups(
         deleted=False,
     )
 
-    category_response = ynab.CategoryResponse(
-        data=ynab.CategoryResponseData(category=mock_category)
-    )
-    categories_api.get_month_category_by_id.return_value = category_response
+    # Mock repository method
+    mock_repository.get_month_category_by_id.return_value = mock_category
 
     # Mock category groups with categories that don't include our target
     category_group1 = ynab.CategoryGroupWithCategories(
@@ -457,11 +445,8 @@ async def test_get_budget_month_with_default_budget(
         categories=[category],
     )
 
-    month_response = ynab.MonthDetailResponse(
-        data=ynab.MonthDetailResponseData(month=month)
-    )
-
-    months_api.get_budget_month.return_value = month_response
+    # Mock repository method
+    mock_repository.get_budget_month.return_value = month
 
     # Mock the categories API call for getting group names
     category_group = ynab.CategoryGroupWithCategories(
@@ -589,11 +574,8 @@ async def test_get_budget_month_filters_deleted_and_hidden(
         categories=[active_category, deleted_category, hidden_category],
     )
 
-    month_response = ynab.MonthDetailResponse(
-        data=ynab.MonthDetailResponseData(month=month)
-    )
-
-    months_api.get_budget_month.return_value = month_response
+    # Mock repository method
+    mock_repository.get_budget_month.return_value = month
 
     # Mock the categories API call for getting group names
     category_group = ynab.CategoryGroupWithCategories(
