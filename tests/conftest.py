@@ -23,25 +23,23 @@ import server
 def mock_environment_variables(monkeypatch: pytest.MonkeyPatch) -> None:
     """Mock environment variables for testing."""
     monkeypatch.setenv("YNAB_ACCESS_TOKEN", "test_token_123")
-    monkeypatch.setenv("YNAB_DEFAULT_BUDGET", "budget-123")
+    monkeypatch.setenv("YNAB_BUDGET", "test_budget_id")
 
 
 @pytest.fixture
 def ynab_client(mock_environment_variables: None) -> Generator[MagicMock, None, None]:
     """Mock YNAB client with proper autospec for testing."""
-    with patch("server.get_ynab_client") as mock_get_client:
-        mock_client = MagicMock(spec=ynab.ApiClient)
-        mock_client.__enter__.return_value = mock_client
-        mock_client.__exit__.return_value = None
-        mock_get_client.return_value = mock_client
-        yield mock_client
+    mock_client = MagicMock(spec=ynab.ApiClient)
+    mock_client.__enter__.return_value = mock_client
+    mock_client.__exit__.return_value = None
+    yield mock_client
 
 
 @pytest.fixture
-def accounts_api(ynab_client: MagicMock) -> Generator[MagicMock, None, None]:
-    mock_api = Mock(spec=ynab.AccountsApi)
-    with patch("ynab.AccountsApi", return_value=mock_api):
-        yield mock_api
+def mock_repository() -> Generator[MagicMock, None, None]:
+    """Mock the repository to prevent API calls during testing."""
+    with patch("server._repository") as mock_repo:
+        yield mock_repo
 
 
 @pytest.fixture

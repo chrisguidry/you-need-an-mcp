@@ -70,27 +70,6 @@ def test_milliunits_to_currency_negative() -> None:
     assert result == Decimal("-50")
 
 
-def test_get_ynab_client_with_token(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Test YNAB client creation with valid token."""
-    monkeypatch.setenv("YNAB_ACCESS_TOKEN", "test_token")
-    with (
-        patch("ynab.Configuration") as mock_config,
-        patch("ynab.ApiClient") as mock_client,
-    ):
-        server.get_ynab_client()
-        mock_config.assert_called_once_with(access_token="test_token")
-        mock_client.assert_called_once()
-
-
-def test_get_ynab_client_missing_token(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Test YNAB client creation without token."""
-    monkeypatch.delenv("YNAB_ACCESS_TOKEN", raising=False)
-    with pytest.raises(
-        ValueError, match="YNAB_ACCESS_TOKEN environment variable is required"
-    ):
-        server.get_ynab_client()
-
-
 def test_convert_month_to_date_with_date_object() -> None:
     """Test convert_month_to_date with date object returns unchanged."""
     test_date = date(2024, 3, 15)

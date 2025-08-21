@@ -22,6 +22,7 @@ from models import (
     TransactionsResponse,
     milliunits_to_currency,
 )
+from repository import YNABRepository
 
 mcp = FastMCP[None](
     name="YNAB",
@@ -42,18 +43,13 @@ mcp = FastMCP[None](
 )
 
 
-def get_ynab_client() -> ynab.ApiClient:
-    """Get authenticated YNAB API client."""
-    access_token = os.getenv("YNAB_ACCESS_TOKEN")
-    if not access_token:
-        raise ValueError("YNAB_ACCESS_TOKEN environment variable is required")
-
-    configuration = ynab.Configuration(access_token=access_token)
-    return ynab.ApiClient(configuration)
-
-
-# Load budget ID at module import - fail fast if not configured
+# Load configuration at module import - fail fast if not configured
 BUDGET_ID = os.environ["YNAB_BUDGET"]
+ACCESS_TOKEN = os.environ["YNAB_ACCESS_TOKEN"]
+ynab_api_configuration = ynab.Configuration(access_token=ACCESS_TOKEN)
+
+# Initialize repository at module level
+_repository = YNABRepository(budget_id=BUDGET_ID, access_token=ACCESS_TOKEN)
 
 
 def _paginate_items[T](
@@ -164,18 +160,16 @@ def list_accounts(
     Returns:
         AccountsResponse with accounts list and pagination information
     """
-    with get_ynab_client() as api_client:
-        accounts_api = ynab.AccountsApi(api_client)
-        accounts_response = accounts_api.get_accounts(BUDGET_ID)
+    # Get accounts from repository (syncs automatically if needed)
+    accounts = _repository.get_accounts()
 
-        active_accounts = _filter_active_items(
-            accounts_response.data.accounts, exclude_closed=True
-        )
-        all_accounts = [Account.from_ynab(account) for account in active_accounts]
+    # Apply existing filtering and pagination logic
+    active_accounts = _filter_active_items(accounts, exclude_closed=True)
+    all_accounts = [Account.from_ynab(account) for account in active_accounts]
 
-        accounts_page, pagination = _paginate_items(all_accounts, limit, offset)
+    accounts_page, pagination = _paginate_items(all_accounts, limit, offset)
 
-        return AccountsResponse(accounts=accounts_page, pagination=pagination)
+    return AccountsResponse(accounts=accounts_page, pagination=pagination)
 
 
 @mcp.tool()
@@ -195,7 +189,7 @@ def list_categories(
     Returns:
         CategoriesResponse with categories list and pagination information
     """
-    with get_ynab_client() as api_client:
+    with ynab.ApiClient(ynab_api_configuration) as api_client:
         categories_api = ynab.CategoriesApi(api_client)
         categories_response = categories_api.get_categories(BUDGET_ID)
 
@@ -224,7 +218,7 @@ def list_category_groups() -> list[CategoryGroup]:
     Returns:
         List of category groups
     """
-    with get_ynab_client() as api_client:
+    with ynab.ApiClient(ynab_api_configuration) as api_client:
         categories_api = ynab.CategoriesApi(api_client)
         categories_response = categories_api.get_categories(BUDGET_ID)
 
@@ -261,7 +255,7 @@ def get_budget_month(
     Returns:
         BudgetMonth with month info, categories, and pagination
     """
-    with get_ynab_client() as api_client:
+    with ynab.ApiClient(ynab_api_configuration) as api_client:
         months_api = ynab.MonthsApi(api_client)
         converted_month = convert_month_to_date(month)
         month_response = months_api.get_budget_month(BUDGET_ID, converted_month)
@@ -319,7 +313,7 @@ def get_month_category_by_id(
     Returns:
         Category with budget data for the specified month
     """
-    with get_ynab_client() as api_client:
+    with ynab.ApiClient(ynab_api_configuration) as api_client:
         categories_api = ynab.CategoriesApi(api_client)
         converted_month = convert_month_to_date(month)
         category_response = categories_api.get_month_category_by_id(
@@ -385,7 +379,7 @@ def list_transactions(
     Returns:
         TransactionsResponse with filtered transactions and pagination info
     """
-    with get_ynab_client() as api_client:
+    with ynab.ApiClient(ynab_api_configuration) as api_client:
         transactions_api = ynab.TransactionsApi(api_client)
 
         # Determine which API method to use based on filters
@@ -470,7 +464,7 @@ def list_payees(
     Returns:
         PayeesResponse with payees list and pagination information
     """
-    with get_ynab_client() as api_client:
+    with ynab.ApiClient(ynab_api_configuration) as api_client:
         payees_api = ynab.PayeesApi(api_client)
         payees_response = payees_api.get_payees(BUDGET_ID)
 
@@ -509,7 +503,7 @@ def find_payee(
     Returns:
         PayeesResponse with matching payees and pagination information
     """
-    with get_ynab_client() as api_client:
+    with ynab.ApiClient(ynab_api_configuration) as api_client:
         payees_api = ynab.PayeesApi(api_client)
         payees_response = payees_api.get_payees(BUDGET_ID)
 
@@ -594,7 +588,7 @@ def list_scheduled_transactions(
         ScheduledTransactionsResponse with filtered scheduled transactions and
         pagination info
     """
-    with get_ynab_client() as api_client:
+    with ynab.ApiClient(ynab_api_configuration) as api_client:
         scheduled_transactions_api = ynab.ScheduledTransactionsApi(api_client)
         response = scheduled_transactions_api.get_scheduled_transactions(BUDGET_ID)
 
@@ -667,7 +661,7 @@ def update_category_budget(
     Returns:
         Category with updated budget information
     """
-    with get_ynab_client() as api_client:
+    with ynab.ApiClient(ynab_api_configuration) as api_client:
         categories_api = ynab.CategoriesApi(api_client)
         converted_month = convert_month_to_date(month)
 
@@ -711,7 +705,7 @@ def update_transaction(
     Returns:
         Transaction with updated information
     """
-    with get_ynab_client() as api_client:
+    with ynab.ApiClient(ynab_api_configuration) as api_client:
         transactions_api = ynab.TransactionsApi(api_client)
 
         # First, get the existing transaction to preserve its current values
