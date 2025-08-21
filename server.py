@@ -1,4 +1,5 @@
 import os
+from collections.abc import Sequence
 from datetime import date, datetime
 from decimal import Decimal
 from typing import Literal
@@ -356,6 +357,7 @@ def list_transactions(
         TransactionsResponse with filtered transactions and pagination info
     """
     # Use repository to get transactions with appropriate filtering
+    transactions_data: Sequence[ynab.TransactionDetail | ynab.HybridTransaction]
     if account_id or category_id or payee_id or since_date:
         # Use filtered endpoint for specific filters
         transactions_data = _repository.get_transactions_by_filters(
@@ -368,7 +370,7 @@ def list_transactions(
         # Use cached transactions for general queries
         transactions_data = _repository.get_transactions()
 
-    active_transactions = _filter_active_items(transactions_data)
+    active_transactions = _filter_active_items(list(transactions_data))
     all_transactions = []
     for txn in active_transactions:
         # Apply amount filters (check milliunits directly for efficiency)

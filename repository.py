@@ -7,7 +7,7 @@ Provides local-first access to YNAB data with background synchronization.
 import threading
 from collections.abc import Callable
 from datetime import date, datetime
-from typing import Any, cast
+from typing import Any
 
 import ynab
 
@@ -272,7 +272,7 @@ class YNABRepository:
         category_id: str | None = None,
         payee_id: str | None = None,
         since_date: date | None = None,
-    ) -> list[ynab.TransactionDetail]:
+    ) -> list[ynab.TransactionDetail | ynab.HybridTransaction]:
         """Get transactions using specific YNAB API endpoints for filtering."""
         with ynab.ApiClient(self.configuration) as api_client:
             transactions_api = ynab.TransactionsApi(api_client)
@@ -281,25 +281,17 @@ class YNABRepository:
                 account_response = transactions_api.get_transactions_by_account(
                     self.budget_id, account_id, since_date=since_date, type=None
                 )
-                return cast(
-                    list[ynab.TransactionDetail],
-                    list(account_response.data.transactions),
-                )
+                return list(account_response.data.transactions)
             elif category_id:
                 category_response = transactions_api.get_transactions_by_category(
                     self.budget_id, category_id, since_date=since_date, type=None
                 )
-                return cast(
-                    list[ynab.TransactionDetail],
-                    list(category_response.data.transactions),
-                )
+                return list(category_response.data.transactions)
             elif payee_id:
                 payee_response = transactions_api.get_transactions_by_payee(
                     self.budget_id, payee_id, since_date=since_date, type=None
                 )
-                return cast(
-                    list[ynab.TransactionDetail], list(payee_response.data.transactions)
-                )
+                return list(payee_response.data.transactions)
             else:
                 # Use general transactions endpoint
                 general_response = transactions_api.get_transactions(

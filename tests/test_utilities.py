@@ -48,10 +48,13 @@ def test_milliunits_to_currency_valid_input() -> None:
 
 def test_milliunits_to_currency_none_input() -> None:
     """Test milliunits conversion with None input raises TypeError."""
+    from typing import Any
+
     with pytest.raises(TypeError):
         from models import milliunits_to_currency
 
-        milliunits_to_currency(None)  # type: ignore
+        none_value: Any = None
+        milliunits_to_currency(none_value)
 
 
 def test_milliunits_to_currency_zero() -> None:
@@ -121,8 +124,11 @@ def test_convert_month_to_date_with_last_and_next() -> None:
 
 def test_convert_month_to_date_invalid_value() -> None:
     """Test convert_month_to_date with invalid value raises error."""
+    from typing import Any
+
     with pytest.raises(ValueError, match="Invalid month value: invalid"):
-        server.convert_month_to_date("invalid")  # type: ignore[arg-type]
+        invalid_value: Any = "invalid"
+        server.convert_month_to_date(invalid_value)
 
 
 def test_convert_transaction_to_model_basic() -> None:

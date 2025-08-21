@@ -14,11 +14,11 @@ from mcp.types import TextContent
 def extract_response_data(result: list[Any]) -> dict[str, Any]:
     """Extract JSON data from MCP client response."""
     assert len(result) == 1
-    response_data = (
+    response_data: dict[str, Any] | None = (
         json.loads(result[0].text) if isinstance(result[0], TextContent) else None
     )
     assert response_data is not None
-    return response_data  # type: ignore[no-any-return]
+    return response_data
 
 
 def assert_pagination_info(
