@@ -41,6 +41,14 @@ class YNABRepository:
         with self._lock:
             return self._data.get("payees", [])
 
+    def get_category_groups(self) -> list[ynab.CategoryGroupWithCategories]:
+        """Get all category groups from local repository."""
+        if "category_groups" not in self._data:
+            self.sync_category_groups()
+
+        with self._lock:
+            return self._data.get("category_groups", [])
+
     def sync_accounts(self) -> None:
         """Sync accounts with YNAB API using differential sync."""
         self._sync_entity("accounts", self._sync_accounts_from_api)
@@ -48,6 +56,10 @@ class YNABRepository:
     def sync_payees(self) -> None:
         """Sync payees with YNAB API using differential sync."""
         self._sync_entity("payees", self._sync_payees_from_api)
+
+    def sync_category_groups(self) -> None:
+        """Sync category groups with YNAB API using differential sync."""
+        self._sync_entity("category_groups", self._sync_category_groups_from_api)
 
     def _sync_accounts_from_api(
         self, last_knowledge: int | None
@@ -92,6 +104,30 @@ class YNABRepository:
                 response = payees_api.get_payees(self.budget_id)
 
             return list(response.data.payees), response.data.server_knowledge
+
+    def _sync_category_groups_from_api(
+        self, last_knowledge: int | None
+    ) -> tuple[list[ynab.CategoryGroupWithCategories], int]:
+        """Fetch category groups from YNAB API with optional server knowledge."""
+        with ynab.ApiClient(self.configuration) as api_client:
+            categories_api = ynab.CategoriesApi(api_client)
+
+            if last_knowledge is not None:
+                try:
+                    response = categories_api.get_categories(
+                        self.budget_id, last_knowledge_of_server=last_knowledge
+                    )
+                except Exception:
+                    # If delta sync fails, fall back to full sync
+                    response = categories_api.get_categories(self.budget_id)
+                    # Signal full refresh by returning None for last_knowledge
+                    return list(
+                        response.data.category_groups
+                    ), response.data.server_knowledge
+            else:
+                response = categories_api.get_categories(self.budget_id)
+
+            return list(response.data.category_groups), response.data.server_knowledge
 
     def _sync_entity(
         self, entity_type: str, sync_func: Callable[[int | None], tuple[list[Any], int]]

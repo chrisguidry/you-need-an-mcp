@@ -189,26 +189,24 @@ def list_categories(
     Returns:
         CategoriesResponse with categories list and pagination information
     """
-    with ynab.ApiClient(ynab_api_configuration) as api_client:
-        categories_api = ynab.CategoriesApi(api_client)
-        categories_response = categories_api.get_categories(BUDGET_ID)
+    category_groups = _repository.get_category_groups()
 
-        all_categories = []
-        for category_group in categories_response.data.category_groups:
-            active_categories = _filter_active_items(
-                category_group.categories, exclude_hidden=True
+    all_categories = []
+    for category_group in category_groups:
+        active_categories = _filter_active_items(
+            category_group.categories, exclude_hidden=True
+        )
+        for category in active_categories:
+            all_categories.append(
+                Category.from_ynab(category, category_group.name).model_dump()
             )
-            for category in active_categories:
-                all_categories.append(
-                    Category.from_ynab(category, category_group.name).model_dump()
-                )
 
-        categories_page, pagination = _paginate_items(all_categories, limit, offset)
+    categories_page, pagination = _paginate_items(all_categories, limit, offset)
 
-        # Convert dict categories back to Category objects
-        category_objects = [Category(**cat_dict) for cat_dict in categories_page]
+    # Convert dict categories back to Category objects
+    category_objects = [Category(**cat_dict) for cat_dict in categories_page]
 
-        return CategoriesResponse(categories=category_objects, pagination=pagination)
+    return CategoriesResponse(categories=category_objects, pagination=pagination)
 
 
 @mcp.tool()
@@ -218,16 +216,13 @@ def list_category_groups() -> list[CategoryGroup]:
     Returns:
         List of category groups
     """
-    with ynab.ApiClient(ynab_api_configuration) as api_client:
-        categories_api = ynab.CategoriesApi(api_client)
-        categories_response = categories_api.get_categories(BUDGET_ID)
+    category_groups = _repository.get_category_groups()
+    active_groups = _filter_active_items(category_groups)
+    groups = [
+        CategoryGroup.from_ynab(category_group) for category_group in active_groups
+    ]
 
-        active_groups = _filter_active_items(categories_response.data.category_groups)
-        groups = [
-            CategoryGroup.from_ynab(category_group) for category_group in active_groups
-        ]
-
-        return groups
+    return groups
 
 
 @mcp.tool()
@@ -260,14 +255,9 @@ def get_budget_month(
         converted_month = convert_month_to_date(month)
         month_response = months_api.get_budget_month(BUDGET_ID, converted_month)
 
-        # Fetch category groups for names
-        categories_api = ynab.CategoriesApi(api_client)
-        categories_response = categories_api.get_categories(BUDGET_ID)
-
         # Map category IDs to group names
-        category_group_map = _build_category_group_map(
-            categories_response.data.category_groups
-        )
+        category_groups = _repository.get_category_groups()
+        category_group_map = _build_category_group_map(category_groups)
 
         month_data = month_response.data.month
         all_categories = []
@@ -323,10 +313,8 @@ def get_month_category_by_id(
         category = category_response.data.category
 
         # Fetch category groups to get group name
-        categories_response = categories_api.get_categories(BUDGET_ID)
-        category_group_map = _build_category_group_map(
-            categories_response.data.category_groups
-        )
+        category_groups = _repository.get_category_groups()
+        category_group_map = _build_category_group_map(category_groups)
         group_name = category_group_map.get(category_id)
 
         return Category.from_ynab(category, group_name)
@@ -673,10 +661,8 @@ def update_category_budget(
         )
 
         # Get category group name for the response
-        categories_response = categories_api.get_categories(BUDGET_ID)
-        category_group_map = _build_category_group_map(
-            categories_response.data.category_groups
-        )
+        category_groups = _repository.get_category_groups()
+        category_group_map = _build_category_group_map(category_groups)
         group_name = category_group_map.get(category_id)
 
         return Category.from_ynab(response.data.category, group_name)

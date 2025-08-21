@@ -89,6 +89,7 @@ def create_ynab_transaction_detail(
 async def test_update_category_budget_success(
     mock_environment_variables: None,
     categories_api: MagicMock,
+    mock_repository: MagicMock,
     mcp_client: Client[FastMCPTransport],
 ) -> None:
     """Test successful category budget update."""
@@ -119,12 +120,9 @@ async def test_update_category_budget_success(
         deleted=False,
         categories=[updated_category],
     )
-    categories_response = ynab.CategoriesResponse(
-        data=ynab.CategoriesResponseData(
-            category_groups=[category_group], server_knowledge=0
-        )
-    )
-    categories_api.get_categories.return_value = categories_response
+
+    # Mock repository to return category groups
+    mock_repository.get_category_groups.return_value = [category_group]
 
     # Execute the tool
     result = await mcp_client.call_tool(

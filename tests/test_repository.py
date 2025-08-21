@@ -436,3 +436,171 @@ def test_repository_payees_lazy_initialization(repository: YNABRepository) -> No
     # Verify data is available
     assert len(payees) == 1
     assert payees[0].id == "payee-1"
+
+
+def create_ynab_category_group(
+    *,
+    id: str = "group-1",
+    name: str = "Test Group",
+    deleted: bool = False,
+    **kwargs: Any,
+) -> ynab.CategoryGroupWithCategories:
+    """Create a YNAB CategoryGroupWithCategories for testing with sensible defaults."""
+    categories = kwargs.get("categories", [])
+    return ynab.CategoryGroupWithCategories(
+        id=id,
+        name=name,
+        hidden=kwargs.get("hidden", False),
+        deleted=deleted,
+        categories=categories,
+    )
+
+
+def test_repository_category_groups_initial_sync(repository: YNABRepository) -> None:
+    """Test repository initial sync for category groups without server knowledge."""
+    group1 = create_ynab_category_group(id="group-1", name="Monthly Bills")
+    group2 = create_ynab_category_group(id="group-2", name="Everyday Expenses")
+
+    categories_response = ynab.CategoriesResponse(
+        data=ynab.CategoriesResponseData(
+            category_groups=[group1, group2], server_knowledge=100
+        )
+    )
+
+    with patch("ynab.ApiClient") as mock_client_class:
+        mock_client = MagicMock()
+        mock_client_class.return_value.__enter__.return_value = mock_client
+
+        mock_categories_api = MagicMock()
+        mock_categories_api.get_categories.return_value = categories_response
+
+        with patch("ynab.CategoriesApi", return_value=mock_categories_api):
+            repository.sync_category_groups()
+
+    # Verify initial sync called without last_knowledge_of_server
+    mock_categories_api.get_categories.assert_called_once_with("test-budget")
+
+    # Verify data was stored
+    category_groups = repository.get_category_groups()
+    assert len(category_groups) == 2
+    assert category_groups[0].id == "group-1"
+    assert category_groups[1].id == "group-2"
+
+    # Verify server knowledge was stored
+    assert repository._server_knowledge["category_groups"] == 100
+
+
+def test_repository_category_groups_delta_sync(repository: YNABRepository) -> None:
+    """Test repository delta sync for category groups with server knowledge."""
+    # Set up initial state
+    group1 = create_ynab_category_group(id="group-1", name="Monthly Bills")
+    repository._data["category_groups"] = [group1]
+    repository._server_knowledge["category_groups"] = 100
+    repository._last_sync = datetime.now()
+
+    # Delta sync with updated group and new group
+    updated_group1 = create_ynab_category_group(id="group-1", name="Fixed Expenses")
+    new_group = create_ynab_category_group(id="group-2", name="Variable Expenses")
+
+    delta_response = ynab.CategoriesResponse(
+        data=ynab.CategoriesResponseData(
+            category_groups=[updated_group1, new_group], server_knowledge=110
+        )
+    )
+
+    with patch("ynab.ApiClient") as mock_client_class:
+        mock_client = MagicMock()
+        mock_client_class.return_value.__enter__.return_value = mock_client
+
+        mock_categories_api = MagicMock()
+        mock_categories_api.get_categories.return_value = delta_response
+
+        with patch("ynab.CategoriesApi", return_value=mock_categories_api):
+            repository.sync_category_groups()
+
+    # Verify delta sync called with last_knowledge_of_server
+    mock_categories_api.get_categories.assert_called_once_with(
+        "test-budget", last_knowledge_of_server=100
+    )
+
+    # Verify deltas were applied
+    category_groups = repository.get_category_groups()
+    assert len(category_groups) == 2
+
+    # Find groups by ID
+    g1 = next(g for g in category_groups if g.id == "group-1")
+    g2 = next(g for g in category_groups if g.id == "group-2")
+
+    assert g1.name == "Fixed Expenses"  # Updated
+    assert g2.name == "Variable Expenses"  # Added
+
+    # Verify server knowledge was updated
+    assert repository._server_knowledge["category_groups"] == 110
+
+
+def test_repository_category_groups_handles_deleted(repository: YNABRepository) -> None:
+    """Test repository handles deleted category groups in delta sync."""
+    # Set up initial state with two groups
+    group1 = create_ynab_category_group(id="group-1", name="Monthly Bills")
+    group2 = create_ynab_category_group(id="group-2", name="Old Category")
+    repository._data["category_groups"] = [group1, group2]
+    repository._server_knowledge["category_groups"] = 100
+    repository._last_sync = datetime.now()
+
+    # Delta with one deleted group
+    deleted_group = create_ynab_category_group(
+        id="group-2", name="Old Category", deleted=True
+    )
+
+    delta_response = ynab.CategoriesResponse(
+        data=ynab.CategoriesResponseData(
+            category_groups=[deleted_group], server_knowledge=110
+        )
+    )
+
+    with patch("ynab.ApiClient") as mock_client_class:
+        mock_client = MagicMock()
+        mock_client_class.return_value.__enter__.return_value = mock_client
+
+        mock_categories_api = MagicMock()
+        mock_categories_api.get_categories.return_value = delta_response
+
+        with patch("ynab.CategoriesApi", return_value=mock_categories_api):
+            repository.sync_category_groups()
+
+    # Verify deleted group was removed
+    category_groups = repository.get_category_groups()
+    assert len(category_groups) == 1
+    assert category_groups[0].id == "group-1"  # Only Monthly Bills remains
+
+
+def test_repository_category_groups_lazy_initialization(
+    repository: YNABRepository,
+) -> None:
+    """Test category groups repository initializes automatically when data requested."""
+    group1 = create_ynab_category_group(id="group-1", name="Monthly Bills")
+
+    categories_response = ynab.CategoriesResponse(
+        data=ynab.CategoriesResponseData(category_groups=[group1], server_knowledge=100)
+    )
+
+    with patch("ynab.ApiClient") as mock_client_class:
+        mock_client = MagicMock()
+        mock_client_class.return_value.__enter__.return_value = mock_client
+
+        mock_categories_api = MagicMock()
+        mock_categories_api.get_categories.return_value = categories_response
+
+        with patch("ynab.CategoriesApi", return_value=mock_categories_api):
+            # Repository category groups is not initialized initially
+            assert "category_groups" not in repository._data
+
+            # Calling get_category_groups should trigger sync
+            category_groups = repository.get_category_groups()
+
+    # Verify sync was called
+    mock_categories_api.get_categories.assert_called_once()
+
+    # Verify data is available
+    assert len(category_groups) == 1
+    assert category_groups[0].id == "group-1"

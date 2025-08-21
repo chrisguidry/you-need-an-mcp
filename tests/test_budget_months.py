@@ -14,6 +14,7 @@ from mcp.types import TextContent
 async def test_get_budget_month_success(
     months_api: MagicMock,
     categories_api: MagicMock,
+    mock_repository: MagicMock,
     mcp_client: Client[FastMCPTransport],
 ) -> None:
     """Test successful budget month retrieval."""
@@ -69,12 +70,9 @@ async def test_get_budget_month_success(
         deleted=False,
         categories=[category],
     )
-    categories_response = ynab.CategoriesResponse(
-        data=ynab.CategoriesResponseData(
-            category_groups=[category_group], server_knowledge=0
-        )
-    )
-    categories_api.get_categories.return_value = categories_response
+
+    # Mock repository to return category groups
+    mock_repository.get_category_groups.return_value = [category_group]
 
     result = await mcp_client.call_tool("get_budget_month", {})
 
@@ -92,6 +90,7 @@ async def test_get_budget_month_success(
 async def test_get_month_category_by_id_success(
     months_api: MagicMock,
     categories_api: MagicMock,
+    mock_repository: MagicMock,
     mcp_client: Client[FastMCPTransport],
 ) -> None:
     """Test successful month category retrieval by ID."""
@@ -136,12 +135,8 @@ async def test_get_month_category_by_id_success(
         deleted=False,
         categories=[mock_category],
     )
-    categories_response = ynab.CategoriesResponse(
-        data=ynab.CategoriesResponseData(
-            category_groups=[category_group], server_knowledge=0
-        )
-    )
-    categories_api.get_categories.return_value = categories_response
+    # Mock repository to return category groups
+    mock_repository.get_category_groups.return_value = [category_group]
 
     result = await mcp_client.call_tool(
         "get_month_category_by_id",
@@ -159,7 +154,9 @@ async def test_get_month_category_by_id_success(
 
 
 async def test_get_month_category_by_id_default_budget(
-    categories_api: MagicMock, mcp_client: Client[FastMCPTransport]
+    categories_api: MagicMock,
+    mock_repository: MagicMock,
+    mcp_client: Client[FastMCPTransport],
 ) -> None:
     """Test month category retrieval using default budget."""
     mock_category = ynab.Category(
@@ -203,12 +200,8 @@ async def test_get_month_category_by_id_default_budget(
         deleted=False,
         categories=[mock_category],
     )
-    categories_response = ynab.CategoriesResponse(
-        data=ynab.CategoriesResponseData(
-            category_groups=[category_group], server_knowledge=0
-        )
-    )
-    categories_api.get_categories.return_value = categories_response
+    # Mock repository to return category groups
+    mock_repository.get_category_groups.return_value = [category_group]
 
     # Call without budget_id to test default
     result = await mcp_client.call_tool(
@@ -226,7 +219,9 @@ async def test_get_month_category_by_id_default_budget(
 
 
 async def test_get_month_category_by_id_no_groups(
-    categories_api: MagicMock, mcp_client: Client[FastMCPTransport]
+    categories_api: MagicMock,
+    mock_repository: MagicMock,
+    mcp_client: Client[FastMCPTransport],
 ) -> None:
     """Test month category retrieval when no category groups exist."""
     mock_category = ynab.Category(
@@ -262,10 +257,7 @@ async def test_get_month_category_by_id_no_groups(
     categories_api.get_month_category_by_id.return_value = category_response
 
     # Mock empty category groups response
-    categories_response = ynab.CategoriesResponse(
-        data=ynab.CategoriesResponseData(category_groups=[], server_knowledge=0)
-    )
-    categories_api.get_categories.return_value = categories_response
+    mock_repository.get_category_groups.return_value = []
 
     result = await mcp_client.call_tool(
         "get_month_category_by_id", {"category_id": "cat-orphan"}
@@ -281,7 +273,9 @@ async def test_get_month_category_by_id_no_groups(
 
 
 async def test_get_month_category_by_id_category_not_in_groups(
-    categories_api: MagicMock, mcp_client: Client[FastMCPTransport]
+    categories_api: MagicMock,
+    mock_repository: MagicMock,
+    mcp_client: Client[FastMCPTransport],
 ) -> None:
     """Test month category retrieval when category is not found in any group."""
     mock_category = ynab.Category(
@@ -397,13 +391,12 @@ async def test_get_month_category_by_id_category_not_in_groups(
         categories=[],
     )
 
-    categories_response = ynab.CategoriesResponse(
-        data=ynab.CategoriesResponseData(
-            category_groups=[category_group1, empty_group, category_group2],
-            server_knowledge=0,
-        )
-    )
-    categories_api.get_categories.return_value = categories_response
+    # Mock repository to return category groups
+    mock_repository.get_category_groups.return_value = [
+        category_group1,
+        empty_group,
+        category_group2,
+    ]
 
     result = await mcp_client.call_tool(
         "get_month_category_by_id", {"category_id": "cat-notfound"}
@@ -421,6 +414,7 @@ async def test_get_month_category_by_id_category_not_in_groups(
 async def test_get_budget_month_with_default_budget(
     months_api: MagicMock,
     categories_api: MagicMock,
+    mock_repository: MagicMock,
     mcp_client: Client[FastMCPTransport],
 ) -> None:
     """Test budget month retrieval with default budget."""
@@ -477,12 +471,8 @@ async def test_get_budget_month_with_default_budget(
         deleted=False,
         categories=[category],
     )
-    categories_response = ynab.CategoriesResponse(
-        data=ynab.CategoriesResponseData(
-            category_groups=[category_group], server_knowledge=0
-        )
-    )
-    categories_api.get_categories.return_value = categories_response
+    # Mock repository to return category groups
+    mock_repository.get_category_groups.return_value = [category_group]
 
     # Call without budget_id to test default
     result = await mcp_client.call_tool("get_budget_month", {})
@@ -499,6 +489,7 @@ async def test_get_budget_month_with_default_budget(
 async def test_get_budget_month_filters_deleted_and_hidden(
     months_api: MagicMock,
     categories_api: MagicMock,
+    mock_repository: MagicMock,
     mcp_client: Client[FastMCPTransport],
 ) -> None:
     """Test that get_budget_month filters out deleted and hidden categories."""
@@ -612,12 +603,8 @@ async def test_get_budget_month_filters_deleted_and_hidden(
         deleted=False,
         categories=[active_category, deleted_category, hidden_category],
     )
-    categories_response = ynab.CategoriesResponse(
-        data=ynab.CategoriesResponseData(
-            category_groups=[category_group], server_knowledge=0
-        )
-    )
-    categories_api.get_categories.return_value = categories_response
+    # Mock repository to return category groups
+    mock_repository.get_category_groups.return_value = [category_group]
 
     result = await mcp_client.call_tool("get_budget_month", {})
 

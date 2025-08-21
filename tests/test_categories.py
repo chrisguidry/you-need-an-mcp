@@ -52,9 +52,7 @@ def create_ynab_category(
 
 
 async def test_list_categories_success(
-    mock_environment_variables: None,
-    categories_api: MagicMock,
-    mcp_client: Client[FastMCPTransport],
+    mock_repository: MagicMock, mcp_client: Client[FastMCPTransport]
 ) -> None:
     """Test successful category listing."""
     visible_category = create_ynab_category(
@@ -83,12 +81,8 @@ async def test_list_categories_success(
         categories=[visible_category, hidden_category],
     )
 
-    categories_response = ynab.CategoriesResponse(
-        data=ynab.CategoriesResponseData(
-            category_groups=[category_group], server_knowledge=0
-        )
-    )
-    categories_api.get_categories.return_value = categories_response
+    # Mock repository to return category groups
+    mock_repository.get_category_groups.return_value = [category_group]
 
     result = await mcp_client.call_tool("list_categories", {})
     response_data = extract_response_data(result)
@@ -109,9 +103,7 @@ async def test_list_categories_success(
 
 
 async def test_list_category_groups_success(
-    mock_environment_variables: None,
-    categories_api: MagicMock,
-    mcp_client: Client[FastMCPTransport],
+    mock_repository: MagicMock, mcp_client: Client[FastMCPTransport]
 ) -> None:
     """Test successful category group listing."""
 
@@ -150,13 +142,8 @@ async def test_list_category_groups_success(
         categories=[category],
     )
 
-    categories_response = ynab.CategoriesResponse(
-        data=ynab.CategoriesResponseData(
-            category_groups=[category_group], server_knowledge=0
-        )
-    )
-
-    categories_api.get_categories.return_value = categories_response
+    # Mock repository to return category groups
+    mock_repository.get_category_groups.return_value = [category_group]
 
     result = await mcp_client.call_tool("list_category_groups", {})
 
@@ -170,9 +157,7 @@ async def test_list_category_groups_success(
 
 
 async def test_list_categories_filters_deleted_and_hidden(
-    mock_environment_variables: None,
-    categories_api: MagicMock,
-    mcp_client: Client[FastMCPTransport],
+    mock_repository: MagicMock, mcp_client: Client[FastMCPTransport]
 ) -> None:
     """Test that list_categories automatically filters out deleted and hidden."""
 
@@ -251,13 +236,8 @@ async def test_list_categories_filters_deleted_and_hidden(
         ],
     )
 
-    categories_response = ynab.CategoriesResponse(
-        data=ynab.CategoriesResponseData(
-            category_groups=[category_group], server_knowledge=0
-        )
-    )
-
-    categories_api.get_categories.return_value = categories_response
+    # Mock repository to return category groups
+    mock_repository.get_category_groups.return_value = [category_group]
 
     result = await mcp_client.call_tool("list_categories", {})
 
@@ -271,9 +251,7 @@ async def test_list_categories_filters_deleted_and_hidden(
 
 
 async def test_list_category_groups_filters_deleted(
-    mock_environment_variables: None,
-    categories_api: MagicMock,
-    mcp_client: Client[FastMCPTransport],
+    mock_repository: MagicMock, mcp_client: Client[FastMCPTransport]
 ) -> None:
     """Test that list_category_groups automatically filters out deleted groups."""
 
@@ -295,13 +273,8 @@ async def test_list_category_groups_filters_deleted(
         categories=[],
     )
 
-    categories_response = ynab.CategoriesResponse(
-        data=ynab.CategoriesResponseData(
-            category_groups=[active_group, deleted_group], server_knowledge=0
-        )
-    )
-
-    categories_api.get_categories.return_value = categories_response
+    # Mock repository to return category groups
+    mock_repository.get_category_groups.return_value = [active_group, deleted_group]
 
     result = await mcp_client.call_tool("list_category_groups", {})
 
