@@ -278,3 +278,161 @@ def test_repository_thread_safety(repository: YNABRepository) -> None:
     assert last_sync1 is not None
     assert last_sync2 is not None
     assert last_sync1 == last_sync2
+
+
+def create_ynab_payee(
+    *,
+    id: str = "payee-1",
+    name: str = "Test Payee",
+    deleted: bool = False,
+    **kwargs: Any,
+) -> ynab.Payee:
+    """Create a YNAB Payee for testing with sensible defaults."""
+    return ynab.Payee(
+        id=id,
+        name=name,
+        transfer_account_id=kwargs.get("transfer_account_id"),
+        deleted=deleted,
+    )
+
+
+def test_repository_payees_initial_sync(repository: YNABRepository) -> None:
+    """Test repository initial sync for payees without server knowledge."""
+    payee1 = create_ynab_payee(id="payee-1", name="Amazon")
+    payee2 = create_ynab_payee(id="payee-2", name="Starbucks")
+
+    payees_response = ynab.PayeesResponse(
+        data=ynab.PayeesResponseData(payees=[payee1, payee2], server_knowledge=100)
+    )
+
+    with patch("ynab.ApiClient") as mock_client_class:
+        mock_client = MagicMock()
+        mock_client_class.return_value.__enter__.return_value = mock_client
+
+        mock_payees_api = MagicMock()
+        mock_payees_api.get_payees.return_value = payees_response
+
+        with patch("ynab.PayeesApi", return_value=mock_payees_api):
+            repository.sync_payees()
+
+    # Verify initial sync called without last_knowledge_of_server
+    mock_payees_api.get_payees.assert_called_once_with("test-budget")
+
+    # Verify data was stored
+    payees = repository.get_payees()
+    assert len(payees) == 2
+    assert payees[0].id == "payee-1"
+    assert payees[1].id == "payee-2"
+
+    # Verify server knowledge was stored
+    assert repository._server_knowledge["payees"] == 100
+
+
+def test_repository_payees_delta_sync(repository: YNABRepository) -> None:
+    """Test repository delta sync for payees with server knowledge."""
+    # Set up initial state
+    payee1 = create_ynab_payee(id="payee-1", name="Amazon")
+    repository._data["payees"] = [payee1]
+    repository._server_knowledge["payees"] = 100
+    repository._last_sync = datetime.now()
+
+    # Delta sync with updated payee and new payee
+    updated_payee1 = create_ynab_payee(id="payee-1", name="Amazon.com")
+    new_payee = create_ynab_payee(id="payee-2", name="Target")
+
+    delta_response = ynab.PayeesResponse(
+        data=ynab.PayeesResponseData(
+            payees=[updated_payee1, new_payee], server_knowledge=110
+        )
+    )
+
+    with patch("ynab.ApiClient") as mock_client_class:
+        mock_client = MagicMock()
+        mock_client_class.return_value.__enter__.return_value = mock_client
+
+        mock_payees_api = MagicMock()
+        mock_payees_api.get_payees.return_value = delta_response
+
+        with patch("ynab.PayeesApi", return_value=mock_payees_api):
+            repository.sync_payees()
+
+    # Verify delta sync called with last_knowledge_of_server
+    mock_payees_api.get_payees.assert_called_once_with(
+        "test-budget", last_knowledge_of_server=100
+    )
+
+    # Verify deltas were applied
+    payees = repository.get_payees()
+    assert len(payees) == 2
+
+    # Find payees by ID
+    p1 = next(p for p in payees if p.id == "payee-1")
+    p2 = next(p for p in payees if p.id == "payee-2")
+
+    assert p1.name == "Amazon.com"  # Updated
+    assert p2.name == "Target"  # Added
+
+    # Verify server knowledge was updated
+    assert repository._server_knowledge["payees"] == 110
+
+
+def test_repository_payees_handles_deleted(repository: YNABRepository) -> None:
+    """Test repository handles deleted payees in delta sync."""
+    # Set up initial state with two payees
+    payee1 = create_ynab_payee(id="payee-1", name="Amazon")
+    payee2 = create_ynab_payee(id="payee-2", name="Old Store")
+    repository._data["payees"] = [payee1, payee2]
+    repository._server_knowledge["payees"] = 100
+    repository._last_sync = datetime.now()
+
+    # Delta with one deleted payee
+    deleted_payee = create_ynab_payee(id="payee-2", name="Old Store", deleted=True)
+
+    delta_response = ynab.PayeesResponse(
+        data=ynab.PayeesResponseData(payees=[deleted_payee], server_knowledge=110)
+    )
+
+    with patch("ynab.ApiClient") as mock_client_class:
+        mock_client = MagicMock()
+        mock_client_class.return_value.__enter__.return_value = mock_client
+
+        mock_payees_api = MagicMock()
+        mock_payees_api.get_payees.return_value = delta_response
+
+        with patch("ynab.PayeesApi", return_value=mock_payees_api):
+            repository.sync_payees()
+
+    # Verify deleted payee was removed
+    payees = repository.get_payees()
+    assert len(payees) == 1
+    assert payees[0].id == "payee-1"  # Only Amazon remains
+
+
+def test_repository_payees_lazy_initialization(repository: YNABRepository) -> None:
+    """Test payees repository initializes automatically when data is requested."""
+    payee1 = create_ynab_payee(id="payee-1", name="Amazon")
+
+    payees_response = ynab.PayeesResponse(
+        data=ynab.PayeesResponseData(payees=[payee1], server_knowledge=100)
+    )
+
+    with patch("ynab.ApiClient") as mock_client_class:
+        mock_client = MagicMock()
+        mock_client_class.return_value.__enter__.return_value = mock_client
+
+        mock_payees_api = MagicMock()
+        mock_payees_api.get_payees.return_value = payees_response
+
+        with patch("ynab.PayeesApi", return_value=mock_payees_api):
+            # Repository payees is not initialized initially
+            assert "payees" not in repository._data
+
+            # Calling get_payees should trigger sync
+            payees = repository.get_payees()
+
+    # Verify sync was called
+    mock_payees_api.get_payees.assert_called_once()
+
+    # Verify data is available
+    assert len(payees) == 1
+    assert payees[0].id == "payee-1"

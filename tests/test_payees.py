@@ -31,7 +31,7 @@ def create_ynab_payee(
 
 
 async def test_list_payees_success(
-    payees_api: MagicMock, mcp_client: Client[FastMCPTransport]
+    mock_repository: MagicMock, mcp_client: Client[FastMCPTransport]
 ) -> None:
     """Test successful payee listing."""
 
@@ -52,14 +52,13 @@ async def test_list_payees_success(
         transfer_account_id="acc-savings",
     )
 
-    payees_response = ynab.PayeesResponse(
-        data=ynab.PayeesResponseData(
-            payees=[payee2, payee1, payee_deleted, payee_transfer],  # Not sorted
-            server_knowledge=1000,
-        )
-    )
-
-    payees_api.get_payees.return_value = payees_response
+    # Mock repository to return test payees
+    mock_repository.get_payees.return_value = [
+        payee2,
+        payee1,
+        payee_deleted,
+        payee_transfer,
+    ]
 
     result = await mcp_client.call_tool("list_payees", {})
 
@@ -87,7 +86,7 @@ async def test_list_payees_success(
 
 
 async def test_list_payees_pagination(
-    payees_api: MagicMock, mcp_client: Client[FastMCPTransport]
+    mock_repository: MagicMock, mcp_client: Client[FastMCPTransport]
 ) -> None:
     """Test payee listing with pagination."""
 
@@ -102,11 +101,7 @@ async def test_list_payees_pagination(
         )
         payees.append(payee)
 
-    payees_response = ynab.PayeesResponse(
-        data=ynab.PayeesResponseData(payees=payees, server_knowledge=1000)
-    )
-
-    payees_api.get_payees.return_value = payees_response
+    mock_repository.get_payees.return_value = payees
 
     # Test first page
     result = await mcp_client.call_tool("list_payees", {"limit": 2, "offset": 0})
@@ -125,7 +120,7 @@ async def test_list_payees_pagination(
 
 
 async def test_list_payees_filters_deleted(
-    payees_api: MagicMock, mcp_client: Client[FastMCPTransport]
+    mock_repository: MagicMock, mcp_client: Client[FastMCPTransport]
 ) -> None:
     """Test that list_payees automatically filters out deleted payees."""
 
@@ -145,13 +140,7 @@ async def test_list_payees_filters_deleted(
         deleted=True,
     )
 
-    payees_response = ynab.PayeesResponse(
-        data=ynab.PayeesResponseData(
-            payees=[payee_active, payee_deleted], server_knowledge=1000
-        )
-    )
-
-    payees_api.get_payees.return_value = payees_response
+    mock_repository.get_payees.return_value = [payee_active, payee_deleted]
 
     result = await mcp_client.call_tool("list_payees", {})
 
@@ -166,7 +155,7 @@ async def test_list_payees_filters_deleted(
 
 
 async def test_find_payee_filters_deleted(
-    payees_api: MagicMock, mcp_client: Client[FastMCPTransport]
+    mock_repository: MagicMock, mcp_client: Client[FastMCPTransport]
 ) -> None:
     """Test that find_payee automatically filters out deleted payees."""
 
@@ -182,13 +171,7 @@ async def test_find_payee_filters_deleted(
         deleted=True,
     )
 
-    payees_response = ynab.PayeesResponse(
-        data=ynab.PayeesResponseData(
-            payees=[payee_active, payee_deleted], server_knowledge=1000
-        )
-    )
-
-    payees_api.get_payees.return_value = payees_response
+    mock_repository.get_payees.return_value = [payee_active, payee_deleted]
 
     result = await mcp_client.call_tool("find_payee", {"name_search": "amazon"})
 
@@ -203,7 +186,7 @@ async def test_find_payee_filters_deleted(
 
 
 async def test_find_payee_success(
-    payees_api: MagicMock, mcp_client: Client[FastMCPTransport]
+    mock_repository: MagicMock, mcp_client: Client[FastMCPTransport]
 ) -> None:
     """Test successful payee search by name."""
 
@@ -241,11 +224,7 @@ async def test_find_payee_success(
         ),
     ]
 
-    payees_response = ynab.PayeesResponse(
-        data=ynab.PayeesResponseData(payees=payees, server_knowledge=1000)
-    )
-
-    payees_api.get_payees.return_value = payees_response
+    mock_repository.get_payees.return_value = payees
 
     # Test searching for "amazon" (case-insensitive)
     result = await mcp_client.call_tool("find_payee", {"name_search": "amazon"})
@@ -265,7 +244,7 @@ async def test_find_payee_success(
 
 
 async def test_find_payee_case_insensitive(
-    payees_api: MagicMock, mcp_client: Client[FastMCPTransport]
+    mock_repository: MagicMock, mcp_client: Client[FastMCPTransport]
 ) -> None:
     """Test that payee search is case-insensitive."""
 
@@ -278,11 +257,7 @@ async def test_find_payee_case_insensitive(
         )
     ]
 
-    payees_response = ynab.PayeesResponse(
-        data=ynab.PayeesResponseData(payees=payees, server_knowledge=1000)
-    )
-
-    payees_api.get_payees.return_value = payees_response
+    mock_repository.get_payees.return_value = payees
 
     # Test various case combinations
     search_terms_matches = [
@@ -307,7 +282,7 @@ async def test_find_payee_case_insensitive(
 
 
 async def test_find_payee_limit(
-    payees_api: MagicMock, mcp_client: Client[FastMCPTransport]
+    mock_repository: MagicMock, mcp_client: Client[FastMCPTransport]
 ) -> None:
     """Test payee search with limit parameter."""
 
@@ -323,11 +298,7 @@ async def test_find_payee_limit(
             )
         )
 
-    payees_response = ynab.PayeesResponse(
-        data=ynab.PayeesResponseData(payees=payees, server_knowledge=1000)
-    )
-
-    payees_api.get_payees.return_value = payees_response
+    mock_repository.get_payees.return_value = payees
 
     # Test with limit of 2
     result = await mcp_client.call_tool(
@@ -348,7 +319,7 @@ async def test_find_payee_limit(
 
 
 async def test_find_payee_no_matches(
-    payees_api: MagicMock, mcp_client: Client[FastMCPTransport]
+    mock_repository: MagicMock, mcp_client: Client[FastMCPTransport]
 ) -> None:
     """Test payee search with no matching results."""
 
@@ -358,11 +329,7 @@ async def test_find_payee_no_matches(
         )
     ]
 
-    payees_response = ynab.PayeesResponse(
-        data=ynab.PayeesResponseData(payees=payees, server_knowledge=1000)
-    )
-
-    payees_api.get_payees.return_value = payees_response
+    mock_repository.get_payees.return_value = payees
 
     result = await mcp_client.call_tool("find_payee", {"name_search": "nonexistent"})
 

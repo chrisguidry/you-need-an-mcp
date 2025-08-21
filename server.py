@@ -464,19 +464,18 @@ def list_payees(
     Returns:
         PayeesResponse with payees list and pagination information
     """
-    with ynab.ApiClient(ynab_api_configuration) as api_client:
-        payees_api = ynab.PayeesApi(api_client)
-        payees_response = payees_api.get_payees(BUDGET_ID)
+    # Get payees from repository (syncs automatically if needed)
+    payees = _repository.get_payees()
 
-        active_payees = _filter_active_items(payees_response.data.payees)
-        all_payees = [Payee.from_ynab(payee) for payee in active_payees]
+    active_payees = _filter_active_items(payees)
+    all_payees = [Payee.from_ynab(payee) for payee in active_payees]
 
-        # Sort by name for easier browsing
-        all_payees.sort(key=lambda p: p.name.lower())
+    # Sort by name for easier browsing
+    all_payees.sort(key=lambda p: p.name.lower())
 
-        payees_page, pagination = _paginate_items(all_payees, limit, offset)
+    payees_page, pagination = _paginate_items(all_payees, limit, offset)
 
-        return PayeesResponse(payees=payees_page, pagination=pagination)
+    return PayeesResponse(payees=payees_page, pagination=pagination)
 
 
 @mcp.tool()
@@ -503,36 +502,35 @@ def find_payee(
     Returns:
         PayeesResponse with matching payees and pagination information
     """
-    with ynab.ApiClient(ynab_api_configuration) as api_client:
-        payees_api = ynab.PayeesApi(api_client)
-        payees_response = payees_api.get_payees(BUDGET_ID)
+    # Get payees from repository (syncs automatically if needed)
+    payees = _repository.get_payees()
 
-        active_payees = _filter_active_items(payees_response.data.payees)
-        search_term = name_search.lower().strip()
-        matching_payees = [
-            Payee.from_ynab(payee)
-            for payee in active_payees
-            if search_term in payee.name.lower()
-        ]
+    active_payees = _filter_active_items(payees)
+    search_term = name_search.lower().strip()
+    matching_payees = [
+        Payee.from_ynab(payee)
+        for payee in active_payees
+        if search_term in payee.name.lower()
+    ]
 
-        # Sort by name for easier browsing
-        matching_payees.sort(key=lambda p: p.name.lower())
+    # Sort by name for easier browsing
+    matching_payees.sort(key=lambda p: p.name.lower())
 
-        # Apply limit (no offset since this is a search, not pagination)
-        limited_payees = matching_payees[:limit]
+    # Apply limit (no offset since this is a search, not pagination)
+    limited_payees = matching_payees[:limit]
 
-        # Create pagination info showing search results
-        total_count = len(matching_payees)
-        has_more = len(matching_payees) > limit
+    # Create pagination info showing search results
+    total_count = len(matching_payees)
+    has_more = len(matching_payees) > limit
 
-        pagination = PaginationInfo(
-            total_count=total_count,
-            limit=limit,
-            offset=0,
-            has_more=has_more,
-        )
+    pagination = PaginationInfo(
+        total_count=total_count,
+        limit=limit,
+        offset=0,
+        has_more=has_more,
+    )
 
-        return PayeesResponse(payees=limited_payees, pagination=pagination)
+    return PayeesResponse(payees=limited_payees, pagination=pagination)
 
 
 @mcp.tool()
