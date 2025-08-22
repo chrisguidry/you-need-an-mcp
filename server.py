@@ -1,3 +1,4 @@
+import logging
 import os
 from collections.abc import Sequence
 from datetime import date, datetime
@@ -24,6 +25,12 @@ from models import (
     milliunits_to_currency,
 )
 from repository import YNABRepository
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+)
+logger = logging.getLogger(__name__)
 
 mcp = FastMCP[None](
     name="YNAB",
@@ -161,7 +168,7 @@ def list_accounts(
     Returns:
         AccountsResponse with accounts list and pagination information
     """
-    # Get accounts from repository (syncs automatically if needed)
+    # Get accounts from repository (handles sync automatically if needed)
     accounts = _repository.get_accounts()
 
     # Apply existing filtering and pagination logic

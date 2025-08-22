@@ -2,53 +2,12 @@
 Test category-related MCP tools.
 """
 
-from typing import Any
 from unittest.mock import MagicMock
 
 import ynab
 from assertions import assert_pagination_info, extract_response_data
+from conftest import create_ynab_category
 from fastmcp.client import Client, FastMCPTransport
-
-
-def create_ynab_category(
-    *,
-    id: str = "cat-1",
-    name: str = "Test Category",
-    category_group_id: str = "group-1",
-    hidden: bool = False,
-    deleted: bool = False,
-    budgeted: int = 50_000,  # $50.00
-    activity: int = -30_000,  # -$30.00
-    balance: int = 20_000,  # $20.00
-    **kwargs: Any,
-) -> ynab.Category:
-    """Create a YNAB Category for testing with sensible defaults."""
-    return ynab.Category(
-        id=id,
-        category_group_id=category_group_id,
-        category_group_name=kwargs.get("category_group_name"),
-        name=name,
-        hidden=hidden,
-        original_category_group_id=kwargs.get("original_category_group_id"),
-        note=kwargs.get("note"),
-        budgeted=budgeted,
-        activity=activity,
-        balance=balance,
-        goal_type=kwargs.get("goal_type"),
-        goal_needs_whole_amount=kwargs.get("goal_needs_whole_amount"),
-        goal_day=kwargs.get("goal_day"),
-        goal_cadence=kwargs.get("goal_cadence"),
-        goal_cadence_frequency=kwargs.get("goal_cadence_frequency"),
-        goal_creation_month=kwargs.get("goal_creation_month"),
-        goal_target=kwargs.get("goal_target"),
-        goal_target_month=kwargs.get("goal_target_month"),
-        goal_percentage_complete=kwargs.get("goal_percentage_complete"),
-        goal_months_to_budget=kwargs.get("goal_months_to_budget"),
-        goal_under_funded=kwargs.get("goal_under_funded"),
-        goal_overall_funded=kwargs.get("goal_overall_funded"),
-        goal_overall_left=kwargs.get("goal_overall_left"),
-        deleted=deleted,
-    )
 
 
 async def test_list_categories_success(

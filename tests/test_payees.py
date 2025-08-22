@@ -1,33 +1,14 @@
 """
 Test suite for payee-related functionality in YNAB MCP Server.
-
-Tests payee listing and search functionality with mocked YNAB API responses
-to ensure correct filtering, pagination, and search behavior.
 """
 
 import json
-from typing import Any
 from unittest.mock import MagicMock
 
 import ynab
+from conftest import create_ynab_payee
 from fastmcp.client import Client, FastMCPTransport
 from mcp.types import TextContent
-
-
-def create_ynab_payee(
-    *,
-    id: str = "payee-1",
-    name: str = "Test Payee",
-    deleted: bool = False,
-    **kwargs: Any,
-) -> ynab.Payee:
-    """Create a YNAB Payee for testing with sensible defaults."""
-    return ynab.Payee(
-        id=id,
-        name=name,
-        transfer_account_id=kwargs.get("transfer_account_id"),
-        deleted=deleted,
-    )
 
 
 async def test_list_payees_success(
