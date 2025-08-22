@@ -106,11 +106,11 @@ async def test_list_category_groups_success(
 
     result = await mcp_client.call_tool("list_category_groups", {})
 
-    assert len(result) == 1
     groups_data = extract_response_data(result)
-    assert groups_data is not None
-    # For a single category group, groups_data is the group itself
-    group = groups_data
+    # Should return a list of category groups
+    assert isinstance(groups_data, list)
+    assert len(groups_data) == 1
+    group = groups_data[0]
     assert group["id"] == "group-1"
     assert group["name"] == "Monthly Bills"
 
@@ -200,9 +200,7 @@ async def test_list_categories_filters_deleted_and_hidden(
 
     result = await mcp_client.call_tool("list_categories", {})
 
-    assert len(result) == 1
     response_data = extract_response_data(result)
-    assert response_data is not None
     # Should only include the active category
     assert len(response_data["categories"]) == 1
     assert response_data["categories"][0]["id"] == "cat-active"
@@ -237,10 +235,10 @@ async def test_list_category_groups_filters_deleted(
 
     result = await mcp_client.call_tool("list_category_groups", {})
 
-    assert len(result) == 1
     response_data = extract_response_data(result)
-    assert response_data is not None
-    # Should only include the active group - single object
-    group = response_data
+    # Should only include the active group
+    assert isinstance(response_data, list)
+    assert len(response_data) == 1
+    group = response_data[0]
     assert group["id"] == "group-active"
     assert group["name"] == "Active Group"

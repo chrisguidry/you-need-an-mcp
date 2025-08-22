@@ -11,11 +11,16 @@ from typing import Any
 from mcp.types import TextContent
 
 
-def extract_response_data(result: list[Any]) -> dict[str, Any]:
+def extract_response_data(result: Any) -> dict[str, Any]:
     """Extract JSON data from MCP client response."""
-    assert len(result) == 1
+    # Handle FastMCP CallToolResult format
+    if not hasattr(result, "content"):
+        raise TypeError(f"Expected CallToolResult with content, got {type(result)}")
+
+    content = result.content
+    assert len(content) == 1
     response_data: dict[str, Any] | None = (
-        json.loads(result[0].text) if isinstance(result[0], TextContent) else None
+        json.loads(content[0].text) if isinstance(content[0], TextContent) else None
     )
     assert response_data is not None
     return response_data

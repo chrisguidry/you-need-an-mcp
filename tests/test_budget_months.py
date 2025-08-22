@@ -2,13 +2,12 @@
 Test budget month and month category-related MCP tools.
 """
 
-import json
 from datetime import date
 from unittest.mock import MagicMock
 
 import ynab
+from assertions import extract_response_data
 from fastmcp.client import Client, FastMCPTransport
-from mcp.types import TextContent
 
 
 async def test_get_budget_month_success(
@@ -74,11 +73,7 @@ async def test_get_budget_month_success(
 
     result = await mcp_client.call_tool("get_budget_month", {})
 
-    assert len(result) == 1
-    response_data = (
-        json.loads(result[0].text) if isinstance(result[0], TextContent) else None
-    )
-    assert response_data is not None
+    response_data = extract_response_data(result)
     assert response_data["note"] == "January budget"
     assert len(response_data["categories"]) == 1
     assert response_data["categories"][0]["id"] == "cat-1"
@@ -138,11 +133,7 @@ async def test_get_month_category_by_id_success(
         {"category_id": "cat-1"},
     )
 
-    assert len(result) == 1
-    response_data = (
-        json.loads(result[0].text) if isinstance(result[0], TextContent) else None
-    )
-    assert response_data is not None
+    response_data = extract_response_data(result)
     assert response_data["id"] == "cat-1"
     assert response_data["name"] == "Groceries"
     assert response_data["category_group_name"] == "Monthly Bills"
@@ -200,11 +191,7 @@ async def test_get_month_category_by_id_default_budget(
         "get_month_category_by_id", {"category_id": "cat-2"}
     )
 
-    assert len(result) == 1
-    response_data = (
-        json.loads(result[0].text) if isinstance(result[0], TextContent) else None
-    )
-    assert response_data is not None
+    response_data = extract_response_data(result)
     assert response_data["id"] == "cat-2"
     assert response_data["name"] == "Entertainment"
     assert response_data["category_group_name"] == "Fun Money"
@@ -253,11 +240,7 @@ async def test_get_month_category_by_id_no_groups(
         "get_month_category_by_id", {"category_id": "cat-orphan"}
     )
 
-    assert len(result) == 1
-    response_data = (
-        json.loads(result[0].text) if isinstance(result[0], TextContent) else None
-    )
-    assert response_data is not None
+    response_data = extract_response_data(result)
     assert response_data["id"] == "cat-orphan"
     assert response_data["category_group_name"] is None
 
@@ -390,11 +373,7 @@ async def test_get_month_category_by_id_category_not_in_groups(
         "get_month_category_by_id", {"category_id": "cat-notfound"}
     )
 
-    assert len(result) == 1
-    response_data = (
-        json.loads(result[0].text) if isinstance(result[0], TextContent) else None
-    )
-    assert response_data is not None
+    response_data = extract_response_data(result)
     assert response_data["id"] == "cat-notfound"
     assert response_data["category_group_name"] is None
 
@@ -462,11 +441,7 @@ async def test_get_budget_month_with_default_budget(
     # Call without budget_id to test default
     result = await mcp_client.call_tool("get_budget_month", {})
 
-    assert len(result) == 1
-    response_data = (
-        json.loads(result[0].text) if isinstance(result[0], TextContent) else None
-    )
-    assert response_data is not None
+    response_data = extract_response_data(result)
     assert len(response_data["categories"]) == 1
     assert response_data["categories"][0]["id"] == "cat-default"
 
@@ -590,11 +565,7 @@ async def test_get_budget_month_filters_deleted_and_hidden(
 
     result = await mcp_client.call_tool("get_budget_month", {})
 
-    assert len(result) == 1
-    response_data = (
-        json.loads(result[0].text) if isinstance(result[0], TextContent) else None
-    )
-    assert response_data is not None
+    response_data = extract_response_data(result)
     # Should only include the active category
     assert len(response_data["categories"]) == 1
     assert response_data["categories"][0]["id"] == "cat-active"

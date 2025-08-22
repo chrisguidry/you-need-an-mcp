@@ -46,7 +46,8 @@ class Account(BaseModel):
     type: str = Field(
         ...,
         description="Account type. Common values: 'checking', 'savings', 'creditCard', "
-        "'cash', 'lineOfCredit', 'otherAsset', 'otherLiability'",
+        "'cash', 'lineOfCredit', 'otherAsset', 'otherLiability', 'mortgage', "
+        "'autoLoan', 'studentLoan'",
     )
     on_budget: bool = Field(
         ..., description="Whether this account is included in budget calculations"
@@ -59,10 +60,50 @@ class Account(BaseModel):
     cleared_balance: Decimal | None = Field(
         None, description="Balance of cleared transactions in currency units"
     )
+    debt_interest_rates: dict[datetime.date, Decimal] | None = Field(
+        None,
+        description="Interest rates by date for debt accounts. Keys are dates, "
+        "values are interest rates as decimals (e.g., 0.03375 for 3.375%)",
+    )
+    debt_minimum_payments: dict[datetime.date, Decimal] | None = Field(
+        None,
+        description="Minimum payment amounts by date for debt accounts. "
+        "Keys are dates, values are payment amounts in currency units",
+    )
+    debt_escrow_amounts: dict[datetime.date, Decimal] | None = Field(
+        None,
+        description="Escrow amounts by date for mortgage accounts. Keys are dates, "
+        "values are escrow amounts in currency units",
+    )
 
     @classmethod
     def from_ynab(cls, account: ynab.Account) -> Account:
         """Convert YNAB Account object to our Account model."""
+        # Convert debt interest rates from milliunits to decimal (e.g., 3375 -> 0.03375)
+        debt_interest_rates = None
+        if hasattr(account, "debt_interest_rates") and account.debt_interest_rates:
+            debt_interest_rates = {
+                datetime.date.fromisoformat(date_str): milliunits_to_currency(rate)
+                / 100
+                for date_str, rate in account.debt_interest_rates.items()
+            }
+
+        # Convert debt minimum payments from milliunits to currency
+        debt_minimum_payments = None
+        if hasattr(account, "debt_minimum_payments") and account.debt_minimum_payments:
+            debt_minimum_payments = {
+                datetime.date.fromisoformat(date_str): milliunits_to_currency(amount)
+                for date_str, amount in account.debt_minimum_payments.items()
+            }
+
+        # Convert debt escrow amounts from milliunits to currency
+        debt_escrow_amounts = None
+        if hasattr(account, "debt_escrow_amounts") and account.debt_escrow_amounts:
+            debt_escrow_amounts = {
+                datetime.date.fromisoformat(date_str): milliunits_to_currency(amount)
+                for date_str, amount in account.debt_escrow_amounts.items()
+            }
+
         return cls(
             id=account.id,
             name=account.name,
@@ -76,6 +117,9 @@ class Account(BaseModel):
             cleared_balance=milliunits_to_currency(account.cleared_balance)
             if account.cleared_balance is not None
             else None,
+            debt_interest_rates=debt_interest_rates,
+            debt_minimum_payments=debt_minimum_payments,
+            debt_escrow_amounts=debt_escrow_amounts,
         )
 
 

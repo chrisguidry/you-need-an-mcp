@@ -217,3 +217,89 @@ async def test_list_accounts_account_types(
     on_budget_status = {acc["id"]: acc["on_budget"] for acc in accounts}
     assert on_budget_status["acc-checking"] is True
     assert on_budget_status["acc-investment"] is False
+
+
+async def test_list_accounts_with_debt_fields(
+    mock_repository: MagicMock,
+    mcp_client: Client[FastMCPTransport],
+) -> None:
+    """Test that debt-related fields are properly included for debt accounts."""
+    # Create a mortgage account with debt fields
+    mortgage_account = create_ynab_account(
+        id="acc-mortgage",
+        name="Home Mortgage",
+        account_type=ynab.AccountType.MORTGAGE,
+        on_budget=False,
+        balance=-250_000_000,  # -$250,000 in milliunits
+        debt_interest_rates={
+            "2024-01-01": 3375,
+            "2024-07-01": 3250,
+        },  # 3.375%, 3.25% in milliunits
+        debt_minimum_payments={
+            "2024-01-01": 1500_000,
+            "2024-07-01": 1450_000,
+        },  # $1500, $1450 in milliunits
+        debt_escrow_amounts={
+            "2024-01-01": 300_000,
+            "2024-07-01": 325_000,
+        },  # $300, $325 in milliunits
+    )
+
+    # Create a credit card with empty debt fields
+    credit_card = create_ynab_account(
+        id="acc-credit",
+        name="Visa Card",
+        account_type=ynab.AccountType.CREDITCARD,
+        on_budget=True,
+        balance=-2500_000,  # -$2,500 in milliunits
+        debt_interest_rates={},  # Empty for credit cards
+        debt_minimum_payments={},
+        debt_escrow_amounts={},
+    )
+
+    # Create a regular checking account without debt fields
+    checking_account = create_ynab_account(
+        id="acc-checking",
+        name="Checking",
+        account_type=ynab.AccountType.CHECKING,
+        balance=5000_000,  # $5,000 in milliunits
+    )
+
+    mock_repository.get_accounts.return_value = [
+        mortgage_account,
+        credit_card,
+        checking_account,
+    ]
+
+    result = await mcp_client.call_tool("list_accounts", {})
+    response_data = extract_response_data(result)
+
+    accounts = response_data["accounts"]
+    assert len(accounts) == 3
+
+    # Find mortgage account and verify debt fields
+    mortgage = next(acc for acc in accounts if acc["id"] == "acc-mortgage")
+    assert mortgage["debt_interest_rates"] == {
+        "2024-01-01": "0.03375",  # 3.375% as decimal
+        "2024-07-01": "0.0325",  # 3.25% as decimal
+    }
+    assert mortgage["debt_minimum_payments"] == {
+        "2024-01-01": "1500",
+        "2024-07-01": "1450",
+    }
+    assert mortgage["debt_escrow_amounts"] == {
+        "2024-01-01": "300",
+        "2024-07-01": "325",
+    }
+
+    # Verify credit card has null debt fields (empty dicts become None)
+    credit = next(acc for acc in accounts if acc["id"] == "acc-credit")
+    assert credit["debt_interest_rates"] is None
+    assert credit["debt_minimum_payments"] is None
+    assert credit["debt_escrow_amounts"] is None
+
+    # Verify checking account has null debt fields
+    checking = next(acc for acc in accounts if acc["id"] == "acc-checking")
+    assert checking["debt_interest_rates"] is None
+    assert checking["debt_minimum_payments"] is None
+    assert checking["debt_escrow_amounts"] is None

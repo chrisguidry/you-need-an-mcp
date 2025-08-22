@@ -4,13 +4,12 @@ Tests for scheduled transaction functionality in YNAB MCP Server.
 Tests the list_scheduled_transactions tool with various filters and scenarios.
 """
 
-import json
 from datetime import date
 from unittest.mock import MagicMock
 
 import ynab
+from assertions import extract_response_data
 from fastmcp.client import Client, FastMCPTransport
-from mcp.types import TextContent
 
 
 async def test_list_scheduled_transactions_basic(
@@ -89,11 +88,7 @@ async def test_list_scheduled_transactions_basic(
 
     result = await mcp_client.call_tool("list_scheduled_transactions", {})
 
-    assert len(result) == 1
-    response_data = (
-        json.loads(result[0].text) if isinstance(result[0], TextContent) else None
-    )
-    assert response_data is not None
+    response_data = extract_response_data(result)
 
     # Should have 2 scheduled transactions (deleted one excluded)
     assert len(response_data["scheduled_transactions"]) == 2
@@ -170,11 +165,7 @@ async def test_list_scheduled_transactions_with_frequency_filter(
         "list_scheduled_transactions", {"frequency": "monthly"}
     )
 
-    assert len(result) == 1
-    response_data = (
-        json.loads(result[0].text) if isinstance(result[0], TextContent) else None
-    )
-    assert response_data is not None
+    response_data = extract_response_data(result)
 
     # Should only have the monthly scheduled transaction
     assert len(response_data["scheduled_transactions"]) == 1
@@ -253,11 +244,7 @@ async def test_list_scheduled_transactions_with_upcoming_days_filter(
             "list_scheduled_transactions", {"upcoming_days": 7}
         )
 
-        assert len(result) == 1
-        response_data = (
-            json.loads(result[0].text) if isinstance(result[0], TextContent) else None
-        )
-        assert response_data is not None
+        response_data = extract_response_data(result)
 
         # Should only have the transaction due within 7 days
         assert len(response_data["scheduled_transactions"]) == 1
@@ -319,11 +306,7 @@ async def test_list_scheduled_transactions_with_amount_filter(
         "list_scheduled_transactions", {"max_amount": -10}
     )
 
-    assert len(result) == 1
-    response_data = (
-        json.loads(result[0].text) if isinstance(result[0], TextContent) else None
-    )
-    assert response_data is not None
+    response_data = extract_response_data(result)
 
     # Should only have the large transaction (<= -$10)
     assert len(response_data["scheduled_transactions"]) == 1
@@ -385,11 +368,7 @@ async def test_list_scheduled_transactions_with_account_filter(
         "list_scheduled_transactions", {"account_id": "acc-checking"}
     )
 
-    assert len(result) == 1
-    response_data = (
-        json.loads(result[0].text) if isinstance(result[0], TextContent) else None
-    )
-    assert response_data is not None
+    response_data = extract_response_data(result)
 
     # Should only have the checking account scheduled transaction
     assert len(response_data["scheduled_transactions"]) == 1
@@ -454,11 +433,7 @@ async def test_list_scheduled_transactions_with_category_filter(
         "list_scheduled_transactions", {"category_id": "cat-bills"}
     )
 
-    assert len(result) == 1
-    response_data = (
-        json.loads(result[0].text) if isinstance(result[0], TextContent) else None
-    )
-    assert response_data is not None
+    response_data = extract_response_data(result)
 
     # Should only have the bills category scheduled transaction
     assert len(response_data["scheduled_transactions"]) == 1
@@ -520,11 +495,7 @@ async def test_list_scheduled_transactions_with_min_amount_filter(
         "list_scheduled_transactions", {"min_amount": -5}
     )
 
-    assert len(result) == 1
-    response_data = (
-        json.loads(result[0].text) if isinstance(result[0], TextContent) else None
-    )
-    assert response_data is not None
+    response_data = extract_response_data(result)
 
     # Should only have the small transaction (>= -$5)
     assert len(response_data["scheduled_transactions"]) == 1
@@ -586,11 +557,7 @@ async def test_list_scheduled_transactions_with_payee_filter(
         "list_scheduled_transactions", {"payee_id": "payee-netflix"}
     )
 
-    assert len(result) == 1
-    response_data = (
-        json.loads(result[0].text) if isinstance(result[0], TextContent) else None
-    )
-    assert response_data is not None
+    response_data = extract_response_data(result)
 
     # Should only have the Netflix scheduled transaction
     assert len(response_data["scheduled_transactions"]) == 1
@@ -636,11 +603,7 @@ async def test_list_scheduled_transactions_pagination(
         "list_scheduled_transactions", {"limit": 5, "offset": 0}
     )
 
-    assert len(result) == 1
-    response_data = (
-        json.loads(result[0].text) if isinstance(result[0], TextContent) else None
-    )
-    assert response_data is not None
+    response_data = extract_response_data(result)
 
     # Should have 5 scheduled transactions
     assert len(response_data["scheduled_transactions"]) == 5
@@ -652,11 +615,7 @@ async def test_list_scheduled_transactions_pagination(
         "list_scheduled_transactions", {"limit": 5, "offset": 5}
     )
 
-    assert len(result) == 1
-    response_data = (
-        json.loads(result[0].text) if isinstance(result[0], TextContent) else None
-    )
-    assert response_data is not None
+    response_data = extract_response_data(result)
 
     # Should have next 5 scheduled transactions
     assert len(response_data["scheduled_transactions"]) == 5
@@ -722,11 +681,7 @@ async def test_list_scheduled_transactions_with_subtransactions(
 
     result = await mcp_client.call_tool("list_scheduled_transactions", {})
 
-    assert len(result) == 1
-    response_data = (
-        json.loads(result[0].text) if isinstance(result[0], TextContent) else None
-    )
-    assert response_data is not None
+    response_data = extract_response_data(result)
 
     # Should have 1 scheduled transaction with subtransactions
     assert len(response_data["scheduled_transactions"]) == 1
@@ -806,11 +761,7 @@ async def test_list_scheduled_transactions_with_deleted_subtransactions(
 
     result = await mcp_client.call_tool("list_scheduled_transactions", {})
 
-    assert len(result) == 1
-    response_data = (
-        json.loads(result[0].text) if isinstance(result[0], TextContent) else None
-    )
-    assert response_data is not None
+    response_data = extract_response_data(result)
 
     # Should have 1 scheduled transaction with only active subtransactions
     assert len(response_data["scheduled_transactions"]) == 1

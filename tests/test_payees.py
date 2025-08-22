@@ -2,13 +2,12 @@
 Test suite for payee-related functionality in YNAB MCP Server.
 """
 
-import json
 from unittest.mock import MagicMock
 
 import ynab
+from assertions import extract_response_data
 from conftest import create_ynab_payee
 from fastmcp.client import Client, FastMCPTransport
-from mcp.types import TextContent
 
 
 async def test_list_payees_success(
@@ -42,12 +41,7 @@ async def test_list_payees_success(
     ]
 
     result = await mcp_client.call_tool("list_payees", {})
-
-    assert len(result) == 1
-    response_data = (
-        json.loads(result[0].text) if isinstance(result[0], TextContent) else None
-    )
-    assert response_data is not None
+    response_data = extract_response_data(result)
 
     # Should have 3 payees (deleted one excluded)
     assert len(response_data["payees"]) == 3
@@ -87,9 +81,7 @@ async def test_list_payees_pagination(
     # Test first page
     result = await mcp_client.call_tool("list_payees", {"limit": 2, "offset": 0})
 
-    response_data = (
-        json.loads(result[0].text) if isinstance(result[0], TextContent) else None
-    )
+    response_data = extract_response_data(result)
     assert response_data is not None
     assert len(response_data["payees"]) == 2
     assert response_data["pagination"]["total_count"] == 5
@@ -125,9 +117,7 @@ async def test_list_payees_filters_deleted(
 
     result = await mcp_client.call_tool("list_payees", {})
 
-    response_data = (
-        json.loads(result[0].text) if isinstance(result[0], TextContent) else None
-    )
+    response_data = extract_response_data(result)
     assert response_data is not None
     # Should only include the active payee
     assert len(response_data["payees"]) == 1
@@ -156,9 +146,7 @@ async def test_find_payee_filters_deleted(
 
     result = await mcp_client.call_tool("find_payee", {"name_search": "amazon"})
 
-    response_data = (
-        json.loads(result[0].text) if isinstance(result[0], TextContent) else None
-    )
+    response_data = extract_response_data(result)
     assert response_data is not None
     # Should only find the active Amazon payee, not the deleted one
     assert len(response_data["payees"]) == 1
@@ -210,9 +198,7 @@ async def test_find_payee_success(
     # Test searching for "amazon" (case-insensitive)
     result = await mcp_client.call_tool("find_payee", {"name_search": "amazon"})
 
-    response_data = (
-        json.loads(result[0].text) if isinstance(result[0], TextContent) else None
-    )
+    response_data = extract_response_data(result)
     assert response_data is not None
     # Should find Amazon and Amazon Web Services, but not deleted Amazon Prime
     assert len(response_data["payees"]) == 2
@@ -253,10 +239,7 @@ async def test_find_payee_case_insensitive(
     for search_term, expected_count in search_terms_matches:
         result = await mcp_client.call_tool("find_payee", {"name_search": search_term})
 
-        response_data = (
-            json.loads(result[0].text) if isinstance(result[0], TextContent) else None
-        )
-        assert response_data is not None
+        response_data = extract_response_data(result)
         assert len(response_data["payees"]) == expected_count
         if expected_count > 0:
             assert response_data["payees"][0]["name"] == "Starbucks Coffee"
@@ -286,9 +269,7 @@ async def test_find_payee_limit(
         "find_payee", {"name_search": "store", "limit": 2}
     )
 
-    response_data = (
-        json.loads(result[0].text) if isinstance(result[0], TextContent) else None
-    )
+    response_data = extract_response_data(result)
     assert response_data is not None
     assert len(response_data["payees"]) == 2
     assert response_data["pagination"]["total_count"] == 5
@@ -314,9 +295,7 @@ async def test_find_payee_no_matches(
 
     result = await mcp_client.call_tool("find_payee", {"name_search": "nonexistent"})
 
-    response_data = (
-        json.loads(result[0].text) if isinstance(result[0], TextContent) else None
-    )
+    response_data = extract_response_data(result)
     assert response_data is not None
     assert len(response_data["payees"]) == 0
     assert response_data["pagination"]["total_count"] == 0

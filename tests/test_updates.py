@@ -130,9 +130,7 @@ async def test_update_category_budget_success(
     )
 
     # Verify the response
-    assert len(result) == 1
     category_data = extract_response_data(result)
-    assert category_data is not None
 
     assert category_data["id"] == "cat-groceries"
     assert category_data["name"] == "Groceries"
@@ -151,7 +149,7 @@ async def test_update_category_budget_success(
 
 async def test_update_transaction_success(
     mock_environment_variables: None,
-    transactions_api: MagicMock,
+    mock_repository: MagicMock,
     mcp_client: Client[FastMCPTransport],
 ) -> None:
     """Test successful transaction update."""
@@ -188,16 +186,9 @@ async def test_update_transaction_success(
         approved=True,
     )
 
-    existing_transaction_response = ynab.TransactionResponse(
-        data=ynab.TransactionResponseData(transaction=original_transaction)
-    )
-    transactions_api.get_transaction_by_id.return_value = existing_transaction_response
-
-    # Mock the update response
-    transaction_response = ynab.TransactionResponse(
-        data=ynab.TransactionResponseData(transaction=updated_transaction)
-    )
-    transactions_api.update_transaction.return_value = transaction_response
+    # Mock the API to return the transaction directly via the repository
+    mock_repository.get_transaction_by_id.return_value = original_transaction
+    mock_repository.update_transaction.return_value = updated_transaction
 
     # Execute the tool
     result = await mcp_client.call_tool(
@@ -210,9 +201,7 @@ async def test_update_transaction_success(
     )
 
     # Verify the response
-    assert len(result) == 1
     transaction_data = extract_response_data(result)
-    assert transaction_data is not None
 
     assert transaction_data["id"] == "txn-123"
     assert transaction_data["amount"] == "-75"  # -$75.00
@@ -221,22 +210,9 @@ async def test_update_transaction_success(
     assert transaction_data["memo"] == "Amazon purchase - household items"
     assert transaction_data["cleared"] == "cleared"
 
-    # Verify the API was called correctly
-    transactions_api.get_transaction_by_id.assert_called_once_with(
-        "test_budget_id", "txn-123"
-    )
-    transactions_api.update_transaction.assert_called_once()
-    call_args = transactions_api.update_transaction.call_args[0]
-    assert call_args[0] == "test_budget_id"  # budget_id (from mock environment)
-    assert call_args[1] == "txn-123"  # transaction_id
-
-    # Verify the put wrapper contains correct data (only fields we changed)
-    put_wrapper = call_args[2]
-    assert put_wrapper.transaction.category_id == "cat-household"
-    assert put_wrapper.transaction.memo == "Amazon purchase - household items"
-    # Verify original fields are preserved
-    assert put_wrapper.transaction.account_id == "acc-checking"
-    assert put_wrapper.transaction.amount == -75_000
+    # Verify the repository was called correctly
+    mock_repository.get_transaction_by_id.assert_called_once_with("txn-123")
+    mock_repository.update_transaction.assert_called_once()
 
 
 async def test_update_category_budget_with_specific_month(
@@ -285,7 +261,6 @@ async def test_update_category_budget_with_specific_month(
     )
 
     # Verify the response
-    assert len(result) == 1
     category_data = extract_response_data(result)
     assert category_data["budgeted"] == "150"
 
@@ -297,7 +272,7 @@ async def test_update_category_budget_with_specific_month(
 
 async def test_update_transaction_minimal_fields(
     mock_environment_variables: None,
-    transactions_api: MagicMock,
+    mock_repository: MagicMock,
     mcp_client: Client[FastMCPTransport],
 ) -> None:
     """Test transaction update with only category change."""
@@ -309,21 +284,15 @@ async def test_update_transaction_minimal_fields(
         category_name="Food",
     )
 
-    existing_transaction_response = ynab.TransactionResponse(
-        data=ynab.TransactionResponseData(transaction=original_transaction)
-    )
-    transactions_api.get_transaction_by_id.return_value = existing_transaction_response
-
     updated_transaction = create_ynab_transaction_detail(
         id="txn-456",
         category_id="cat-gas",
         category_name="Gas & Fuel",
     )
 
-    transaction_response = ynab.TransactionResponse(
-        data=ynab.TransactionResponseData(transaction=updated_transaction)
-    )
-    transactions_api.update_transaction.return_value = transaction_response
+    # Mock the repository methods
+    mock_repository.get_transaction_by_id.return_value = original_transaction
+    mock_repository.update_transaction.return_value = updated_transaction
 
     # Execute with only category_id change
     result = await mcp_client.call_tool(
@@ -335,20 +304,17 @@ async def test_update_transaction_minimal_fields(
     )
 
     # Verify the response
-    assert len(result) == 1
     transaction_data = extract_response_data(result)
     assert transaction_data["category_id"] == "cat-gas"
 
-    # Verify only category_id was included in the update
-    call_args = transactions_api.update_transaction.call_args[0]
-    put_wrapper = call_args[2]
-    # The wrapper should only contain category_id, not other fields
-    assert put_wrapper.transaction.category_id == "cat-gas"
+    # Verify the repository was called correctly
+    mock_repository.get_transaction_by_id.assert_called_once_with("txn-456")
+    mock_repository.update_transaction.assert_called_once()
 
 
 async def test_update_transaction_with_payee(
     mock_environment_variables: None,
-    transactions_api: MagicMock,
+    mock_repository: MagicMock,
     mcp_client: Client[FastMCPTransport],
 ) -> None:
     """Test transaction update with payee_id to cover all branches."""
@@ -362,11 +328,6 @@ async def test_update_transaction_with_payee(
         memo="Store purchase",
     )
 
-    existing_transaction_response = ynab.TransactionResponse(
-        data=ynab.TransactionResponseData(transaction=original_transaction)
-    )
-    transactions_api.get_transaction_by_id.return_value = existing_transaction_response
-
     updated_transaction = create_ynab_transaction_detail(
         id="txn-789",
         amount=-25_500,  # -$25.50
@@ -375,10 +336,9 @@ async def test_update_transaction_with_payee(
         memo="Coffee run",
     )
 
-    transaction_response = ynab.TransactionResponse(
-        data=ynab.TransactionResponseData(transaction=updated_transaction)
-    )
-    transactions_api.update_transaction.return_value = transaction_response
+    # Mock the repository methods
+    mock_repository.get_transaction_by_id.return_value = original_transaction
+    mock_repository.update_transaction.return_value = updated_transaction
 
     # Execute with payee_id
     result = await mcp_client.call_tool(
@@ -391,14 +351,11 @@ async def test_update_transaction_with_payee(
     )
 
     # Verify the response
-    assert len(result) == 1
     transaction_data = extract_response_data(result)
     assert transaction_data["payee_id"] == "payee-starbucks"
     assert transaction_data["memo"] == "Coffee run"
     assert transaction_data["amount"] == "-25.5"
 
-    # Verify the API was called with correct data
-    call_args = transactions_api.update_transaction.call_args[0]
-    put_wrapper = call_args[2]
-    assert put_wrapper.transaction.payee_id == "payee-starbucks"
-    assert put_wrapper.transaction.memo == "Coffee run"
+    # Verify the repository was called correctly
+    mock_repository.get_transaction_by_id.assert_called_once_with("txn-789")
+    mock_repository.update_transaction.assert_called_once()

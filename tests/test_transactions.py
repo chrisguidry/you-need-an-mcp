@@ -63,9 +63,7 @@ async def test_list_transactions_basic(
 
     result = await mcp_client.call_tool("list_transactions", {})
 
-    assert len(result) == 1
     response_data = extract_response_data(result)
-    assert response_data is not None
 
     # Should have 2 transactions (deleted one excluded)
     assert len(response_data["transactions"]) == 2
@@ -113,9 +111,7 @@ async def test_list_transactions_with_account_filter(
         "list_transactions", {"account_id": "acc-checking"}
     )
 
-    assert len(result) == 1
     response_data = extract_response_data(result)
-    assert response_data is not None
     assert len(response_data["transactions"]) == 1
     assert response_data["transactions"][0]["account_id"] == "acc-checking"
 
@@ -367,9 +363,7 @@ async def test_list_transactions_with_category_filter(
         "list_transactions", {"category_id": "cat-dining"}
     )
 
-    assert len(result) == 1
     response_data = extract_response_data(result)
-    assert response_data is not None
     assert len(response_data["transactions"]) == 1
     assert response_data["transactions"][0]["category_id"] == "cat-dining"
 
@@ -406,9 +400,7 @@ async def test_list_transactions_with_payee_filter(
         "list_transactions", {"payee_id": "payee-amazon"}
     )
 
-    assert len(result) == 1
     response_data = extract_response_data(result)
-    assert response_data is not None
     assert len(response_data["transactions"]) == 1
     assert response_data["transactions"][0]["payee_id"] == "payee-amazon"
 
