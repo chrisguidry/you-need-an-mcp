@@ -417,3 +417,75 @@ async def test_list_transactions_with_payee_filter(
         payee_id="payee-amazon",
         since_date=None,
     )
+
+
+async def test_split_transaction_payee_inheritance(
+    mock_repository: MagicMock, mcp_client: Client[FastMCPTransport]
+) -> None:
+    """Test that subtransactions inherit parent payee when their payee is null."""
+    # Create subtransactions where payee is null (simulating API response issue)
+    sub1 = ynab.SubTransaction(
+        id="sub-1",
+        transaction_id="txn-split",
+        amount=-30_000,
+        memo="Groceries portion",
+        payee_id=None,  # Null payee_id
+        payee_name=None,  # Null payee_name (the bug we're fixing)
+        category_id="cat-groceries",
+        category_name="Groceries",
+        transfer_account_id=None,
+        transfer_transaction_id=None,
+        deleted=False,
+    )
+
+    sub2 = ynab.SubTransaction(
+        id="sub-2",
+        transaction_id="txn-split",
+        amount=-20_000,
+        memo="Household items",
+        payee_id=None,  # Null payee_id
+        payee_name=None,  # Null payee_name (the bug we're fixing)
+        category_id="cat-household",
+        category_name="Household",
+        transfer_account_id=None,
+        transfer_transaction_id=None,
+        deleted=False,
+    )
+
+    # Create parent transaction with valid payee (what user sees in YNAB interface)
+    txn_split = create_ynab_transaction(
+        id="txn-split",
+        transaction_date=date(2024, 8, 11),
+        amount=-50_000,
+        memo="Split transaction at Walmart",
+        payee_id="payee-walmart",
+        payee_name="Walmart",  # Parent has payee name
+        category_id=None,  # Split transactions don't have single category
+        category_name=None,
+        subtransactions=[sub1, sub2],
+    )
+
+    # Mock repository to return split transaction
+    mock_repository.get_transactions.return_value = [txn_split]
+
+    result = await mcp_client.call_tool("list_transactions", {})
+
+    response_data = extract_response_data(result)
+    assert response_data is not None
+    assert len(response_data["transactions"]) == 1
+
+    txn = response_data["transactions"][0]
+    assert txn["id"] == "txn-split"
+    assert txn["payee_name"] == "Walmart"  # Parent should have payee name
+    assert txn["payee_id"] == "payee-walmart"
+
+    # Both subtransactions should inherit parent payee info
+    assert len(txn["subtransactions"]) == 2
+
+    assert txn["subtransactions"][0]["id"] == "sub-1"
+    assert txn["subtransactions"][0]["payee_name"] == "Walmart"  # Inherited!
+    assert txn["subtransactions"][0]["payee_id"] == "payee-walmart"  # Inherited!
+
+    assert txn["subtransactions"][1]["id"] == "sub-2"
+    assert txn["subtransactions"][1]["payee_name"] == "Walmart"  # Inherited!
+    assert txn["subtransactions"][1]["payee_id"] == "payee-walmart"  # Inherited!

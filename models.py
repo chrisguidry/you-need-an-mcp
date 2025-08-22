@@ -303,19 +303,29 @@ class Transaction(BaseTransaction):
         # Convert amount from milliunits
         amount = milliunits_to_currency(txn.amount)
 
+        # Get parent transaction payee info
+        parent_payee_id = txn.payee_id
+        parent_payee_name = getattr(txn, "payee_name", None)
+
         # Handle subtransactions if present and available
         subtransactions = None
         if hasattr(txn, "subtransactions") and txn.subtransactions:
             subtransactions = []
             for sub in txn.subtransactions:
                 if not sub.deleted:
+                    # Inherit parent payee info if subtransaction payee is null
+                    sub_payee_id = sub.payee_id if sub.payee_id else parent_payee_id
+                    sub_payee_name = (
+                        sub.payee_name if sub.payee_name else parent_payee_name
+                    )
+
                     subtransactions.append(
                         Subtransaction(
                             id=sub.id,
                             amount=milliunits_to_currency(sub.amount),
                             memo=sub.memo,
-                            payee_id=sub.payee_id,
-                            payee_name=sub.payee_name,
+                            payee_id=sub_payee_id,
+                            payee_name=sub_payee_name,
                             category_id=sub.category_id,
                             category_name=sub.category_name,
                         )
@@ -331,8 +341,8 @@ class Transaction(BaseTransaction):
             flag=format_flag(txn.flag_color, getattr(txn, "flag_name", None)),
             account_id=txn.account_id,
             account_name=getattr(txn, "account_name", None),
-            payee_id=txn.payee_id,
-            payee_name=getattr(txn, "payee_name", None),
+            payee_id=parent_payee_id,
+            payee_name=parent_payee_name,
             category_id=txn.category_id,
             category_name=getattr(txn, "category_name", None),
             subtransactions=subtransactions,
