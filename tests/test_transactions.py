@@ -5,10 +5,12 @@ Tests for transaction-related functionality in YNAB MCP Server.
 from datetime import date
 from unittest.mock import MagicMock
 
+import pytest
 import ynab
 from assertions import extract_response_data
 from conftest import create_ynab_transaction
 from fastmcp.client import Client, FastMCPTransport
+from fastmcp.exceptions import ToolError
 
 
 async def test_list_transactions_basic(
@@ -542,7 +544,7 @@ async def test_hybrid_transaction_subtransaction_payee_resolution(
 
     # Mock repository to return both transactions
     mock_repository.get_transactions_by_filters.return_value = [hybrid_subtxn]
-    mock_repository.get_transactions.return_value = [parent_txn]  # For parent lookup
+    mock_repository.get_transaction_by_id.return_value = parent_txn  # For parent lookup
 
     result = await mcp_client.call_tool(
         "list_transactions", {"category_id": "cd7c0b0e-7895-4f9f-aa1e-b6e0a22020cd"}
@@ -600,33 +602,16 @@ async def test_hybrid_transaction_with_missing_parent(
         parent_transaction_id="nonexistent-parent-id",  # Parent doesn't exist
     )
 
-    # Mock repository - some transactions exist but none match parent ID
+    # Mock repository - parent transaction not found
     mock_repository.get_transactions_by_filters.return_value = [hybrid_subtxn]
-    # Create some transactions that don't match the parent ID to exercise the loop
-    other_txn = create_ynab_transaction(
-        id="different-id",
-        transaction_date=date(2025, 8, 11),
-        amount=-10000,
-        payee_id="payee-1",
-        payee_name="Other Store",
+    # Mock get_transaction_by_id to raise an exception (transaction not found)
+    mock_repository.get_transaction_by_id.side_effect = Exception(
+        "Transaction not found"
     )
-    mock_repository.get_transactions.return_value = [
-        other_txn
-    ]  # Non-matching transactions
 
-    result = await mcp_client.call_tool("list_transactions", {"category_id": "cat-1"})
-
-    response_data = extract_response_data(result)
-    assert response_data is not None
-    assert len(response_data["transactions"]) == 1
-
-    txn = response_data["transactions"][0]
-    assert txn["id"] == "orphan-subtxn"
-
-    # Should remain null when parent not found
-    assert txn["payee_name"] is None
-    assert txn["payee_id"] is None
-    assert txn["parent_transaction_id"] == "nonexistent-parent-id"
+    # Should raise an exception when parent lookup fails
+    with pytest.raises(ToolError, match="Transaction not found"):
+        await mcp_client.call_tool("list_transactions", {"category_id": "cat-1"})
 
 
 async def test_hybrid_transaction_parent_resolver_exception(
@@ -666,22 +651,12 @@ async def test_hybrid_transaction_parent_resolver_exception(
 
     # Mock repository to return the subtransaction
     mock_repository.get_transactions_by_filters.return_value = [hybrid_subtxn]
-    # Make get_transactions raise an exception to test exception handling
-    mock_repository.get_transactions.side_effect = Exception("Database error")
+    # Make get_transaction_by_id raise an exception to test exception handling
+    mock_repository.get_transaction_by_id.side_effect = Exception("Database error")
 
-    result = await mcp_client.call_tool("list_transactions", {"category_id": "cat-1"})
-
-    response_data = extract_response_data(result)
-    assert response_data is not None
-    assert len(response_data["transactions"]) == 1
-
-    txn = response_data["transactions"][0]
-    assert txn["id"] == "exception-subtxn"
-
-    # Should handle exception gracefully and leave payee as null
-    assert txn["payee_name"] is None
-    assert txn["payee_id"] is None
-    assert txn["parent_transaction_id"] == "exception-parent-id"
+    # Should raise an exception when parent lookup fails
+    with pytest.raises(ToolError, match="Database error"):
+        await mcp_client.call_tool("list_transactions", {"category_id": "cat-1"})
 
 
 async def test_hybrid_transaction_parent_with_null_payee(
@@ -733,9 +708,9 @@ async def test_hybrid_transaction_parent_with_null_payee(
 
     # Mock repository to return both
     mock_repository.get_transactions_by_filters.return_value = [hybrid_subtxn]
-    mock_repository.get_transactions.return_value = [
-        parent_txn
-    ]  # Parent found but has null payee
+    mock_repository.get_transaction_by_id.return_value = (
+        parent_txn  # Parent found but has null payee
+    )
 
     result = await mcp_client.call_tool("list_transactions", {"category_id": "cat-1"})
 

@@ -8,11 +8,14 @@ including detailed explanations of YNAB's data model subtleties and conventions.
 from __future__ import annotations
 
 import datetime
-from collections.abc import Callable
 from decimal import Decimal
+from typing import TYPE_CHECKING
 
 import ynab
 from pydantic import BaseModel, Field
+
+if TYPE_CHECKING:  # pragma: no cover
+    from repository import YNABRepository
 
 
 def milliunits_to_currency(milliunits: int, decimal_digits: int = 2) -> Decimal:
@@ -303,14 +306,13 @@ class Transaction(BaseTransaction):
     def from_ynab(
         cls,
         txn: ynab.TransactionDetail | ynab.HybridTransaction,
-        parent_resolver: Callable[[str], tuple[str | None, str | None]] | None = None,
+        repository: YNABRepository | None = None,
     ) -> Transaction:
         """Convert YNAB transaction object to our Transaction model.
 
         Args:
             txn: The YNAB transaction object
-            parent_resolver: Optional function to resolve parent payee info by ID
-                           Returns (payee_id, payee_name) tuple
+            repository: Optional repository to resolve parent transaction info
         """
         # Convert amount from milliunits
         amount = milliunits_to_currency(txn.amount)
@@ -327,14 +329,14 @@ class Transaction(BaseTransaction):
             and not payee_name
             and hasattr(txn, "parent_transaction_id")
             and txn.parent_transaction_id
-            and parent_resolver
+            and repository
         ):
-            resolved_payee_id, resolved_payee_name = parent_resolver(
-                txn.parent_transaction_id
-            )
-            if resolved_payee_id or resolved_payee_name:
-                payee_id = resolved_payee_id
-                payee_name = resolved_payee_name
+            parent_txn = repository.get_transaction_by_id(txn.parent_transaction_id)
+            parent_payee_id = parent_txn.payee_id
+            parent_payee_name = getattr(parent_txn, "payee_name", None)
+            if parent_payee_id or parent_payee_name:
+                payee_id = parent_payee_id
+                payee_name = parent_payee_name
 
         # Handle subtransactions if present and available
         subtransactions = None

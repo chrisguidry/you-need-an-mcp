@@ -60,20 +60,6 @@ ynab_api_configuration = ynab.Configuration(access_token=ACCESS_TOKEN)
 _repository = YNABRepository(budget_id=BUDGET_ID, access_token=ACCESS_TOKEN)
 
 
-def _resolve_parent_payee(parent_transaction_id: str) -> tuple[str | None, str | None]:
-    """Resolve parent transaction payee info for HybridTransaction subtransactions."""
-    try:
-        # Get all transactions and find the parent
-        transactions = _repository.get_transactions()
-        for txn in transactions:
-            if txn.id == parent_transaction_id:
-                return txn.payee_id, getattr(txn, "payee_name", None)
-        return None, None
-    except Exception:
-        # If lookup fails, just return None
-        return None, None
-
-
 def _paginate_items[T](
     items: list[T], limit: int, offset: int
 ) -> tuple[list[T], PaginationInfo]:
@@ -408,7 +394,7 @@ def list_transactions(
         ):
             continue
 
-        all_transactions.append(Transaction.from_ynab(txn, _resolve_parent_payee))
+        all_transactions.append(Transaction.from_ynab(txn, _repository))
 
     # Sort by date descending (most recent first)
     all_transactions.sort(key=lambda t: t.date, reverse=True)
@@ -699,4 +685,4 @@ def update_transaction(
     # Use repository update method with cache invalidation
     updated_transaction = _repository.update_transaction(transaction_id, update_data)
 
-    return Transaction.from_ynab(updated_transaction, _resolve_parent_payee)
+    return Transaction.from_ynab(updated_transaction, _repository)
