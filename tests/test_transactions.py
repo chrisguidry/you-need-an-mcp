@@ -489,3 +489,264 @@ async def test_split_transaction_payee_inheritance(
     assert txn["subtransactions"][1]["id"] == "sub-2"
     assert txn["subtransactions"][1]["payee_name"] == "Walmart"  # Inherited!
     assert txn["subtransactions"][1]["payee_id"] == "payee-walmart"  # Inherited!
+
+
+async def test_hybrid_transaction_subtransaction_payee_resolution(
+    mock_repository: MagicMock, mcp_client: Client[FastMCPTransport]
+) -> None:
+    """Test HybridTransaction subtransactions that need parent payee resolution."""
+    # Create a HybridTransaction subtransaction (like from filtered API)
+    from datetime import date
+
+    from ynab.models.hybrid_transaction import HybridTransaction
+
+    # This simulates what we get from get_transactions_by_filters()
+    hybrid_subtxn = HybridTransaction(
+        id="28a0ce46-a33b-4c3b-bcfc-633a05d9f9ec",
+        date=date(2025, 8, 11),
+        amount=-239660,  # $239.66 in milliunits
+        memo=None,
+        cleared=ynab.TransactionClearedStatus.RECONCILED,
+        approved=True,
+        flag_color=None,
+        flag_name=None,
+        account_id="914dcb14-13da-49d2-86de-ba241c48f047",
+        account_name="American Express",
+        payee_id=None,  # Missing payee info (the bug)
+        payee_name=None,  # Missing payee info (the bug)
+        category_id="cd7c0b0e-7895-4f9f-aa1e-b6e0a22020cd",
+        category_name="Groceries",
+        transfer_account_id=None,
+        transfer_transaction_id=None,
+        matched_transaction_id=None,
+        import_id="YNAB:-339660:2025-08-11:1",
+        import_payee_name=None,
+        import_payee_name_original=None,
+        debt_transaction_type=None,
+        deleted=False,
+        type="subtransaction",  # This is key!
+        parent_transaction_id="5db47639-1867-41df-a807-23cc23b0ffe9",
+    )
+
+    # Create the parent transaction that has the payee info
+    parent_txn = create_ynab_transaction(
+        id="5db47639-1867-41df-a807-23cc23b0ffe9",
+        transaction_date=date(2025, 8, 11),
+        amount=-339660,  # Total amount
+        memo=None,
+        payee_id="payee-walmart",
+        payee_name="Walmart",  # Parent has the payee name
+        category_id=None,
+        category_name="Split",
+    )
+
+    # Mock repository to return both transactions
+    mock_repository.get_transactions_by_filters.return_value = [hybrid_subtxn]
+    mock_repository.get_transactions.return_value = [parent_txn]  # For parent lookup
+
+    result = await mcp_client.call_tool(
+        "list_transactions", {"category_id": "cd7c0b0e-7895-4f9f-aa1e-b6e0a22020cd"}
+    )
+
+    response_data = extract_response_data(result)
+    assert response_data is not None
+    assert len(response_data["transactions"]) == 1
+
+    txn = response_data["transactions"][0]
+    assert txn["id"] == "28a0ce46-a33b-4c3b-bcfc-633a05d9f9ec"
+    assert txn["amount"] == "-239.66"
+
+    # The key test: should have resolved parent payee info
+    assert txn["payee_name"] == "Walmart"  # Resolved from parent!
+    assert txn["payee_id"] == "payee-walmart"  # Resolved from parent!
+    assert (
+        txn["parent_transaction_id"] == "5db47639-1867-41df-a807-23cc23b0ffe9"
+    )  # Should surface parent ID
+
+
+async def test_hybrid_transaction_with_missing_parent(
+    mock_repository: MagicMock, mcp_client: Client[FastMCPTransport]
+) -> None:
+    """Test HybridTransaction subtransaction when parent is not found."""
+    from datetime import date
+
+    from ynab.models.hybrid_transaction import HybridTransaction
+
+    # Create a HybridTransaction subtransaction with non-existent parent
+    hybrid_subtxn = HybridTransaction(
+        id="orphan-subtxn",
+        date=date(2025, 8, 11),
+        amount=-50000,
+        memo=None,
+        cleared=ynab.TransactionClearedStatus.CLEARED,
+        approved=True,
+        flag_color=None,
+        flag_name=None,
+        account_id="acc-1",
+        account_name="Test Account",
+        payee_id=None,
+        payee_name=None,
+        category_id="cat-1",
+        category_name="Test Category",
+        transfer_account_id=None,
+        transfer_transaction_id=None,
+        matched_transaction_id=None,
+        import_id=None,
+        import_payee_name=None,
+        import_payee_name_original=None,
+        debt_transaction_type=None,
+        deleted=False,
+        type="subtransaction",
+        parent_transaction_id="nonexistent-parent-id",  # Parent doesn't exist
+    )
+
+    # Mock repository - some transactions exist but none match parent ID
+    mock_repository.get_transactions_by_filters.return_value = [hybrid_subtxn]
+    # Create some transactions that don't match the parent ID to exercise the loop
+    other_txn = create_ynab_transaction(
+        id="different-id",
+        transaction_date=date(2025, 8, 11),
+        amount=-10000,
+        payee_id="payee-1",
+        payee_name="Other Store",
+    )
+    mock_repository.get_transactions.return_value = [
+        other_txn
+    ]  # Non-matching transactions
+
+    result = await mcp_client.call_tool("list_transactions", {"category_id": "cat-1"})
+
+    response_data = extract_response_data(result)
+    assert response_data is not None
+    assert len(response_data["transactions"]) == 1
+
+    txn = response_data["transactions"][0]
+    assert txn["id"] == "orphan-subtxn"
+
+    # Should remain null when parent not found
+    assert txn["payee_name"] is None
+    assert txn["payee_id"] is None
+    assert txn["parent_transaction_id"] == "nonexistent-parent-id"
+
+
+async def test_hybrid_transaction_parent_resolver_exception(
+    mock_repository: MagicMock, mcp_client: Client[FastMCPTransport]
+) -> None:
+    """Test HybridTransaction when parent resolver throws exception."""
+    from datetime import date
+
+    from ynab.models.hybrid_transaction import HybridTransaction
+
+    hybrid_subtxn = HybridTransaction(
+        id="exception-subtxn",
+        date=date(2025, 8, 11),
+        amount=-75000,
+        memo=None,
+        cleared=ynab.TransactionClearedStatus.CLEARED,
+        approved=True,
+        flag_color=None,
+        flag_name=None,
+        account_id="acc-1",
+        account_name="Test Account",
+        payee_id=None,
+        payee_name=None,
+        category_id="cat-1",
+        category_name="Test Category",
+        transfer_account_id=None,
+        transfer_transaction_id=None,
+        matched_transaction_id=None,
+        import_id=None,
+        import_payee_name=None,
+        import_payee_name_original=None,
+        debt_transaction_type=None,
+        deleted=False,
+        type="subtransaction",
+        parent_transaction_id="exception-parent-id",
+    )
+
+    # Mock repository to return the subtransaction
+    mock_repository.get_transactions_by_filters.return_value = [hybrid_subtxn]
+    # Make get_transactions raise an exception to test exception handling
+    mock_repository.get_transactions.side_effect = Exception("Database error")
+
+    result = await mcp_client.call_tool("list_transactions", {"category_id": "cat-1"})
+
+    response_data = extract_response_data(result)
+    assert response_data is not None
+    assert len(response_data["transactions"]) == 1
+
+    txn = response_data["transactions"][0]
+    assert txn["id"] == "exception-subtxn"
+
+    # Should handle exception gracefully and leave payee as null
+    assert txn["payee_name"] is None
+    assert txn["payee_id"] is None
+    assert txn["parent_transaction_id"] == "exception-parent-id"
+
+
+async def test_hybrid_transaction_parent_with_null_payee(
+    mock_repository: MagicMock, mcp_client: Client[FastMCPTransport]
+) -> None:
+    """Test HybridTransaction when parent transaction also has null payee."""
+    from datetime import date
+
+    from ynab.models.hybrid_transaction import HybridTransaction
+
+    hybrid_subtxn = HybridTransaction(
+        id="null-payee-subtxn",
+        date=date(2025, 8, 11),
+        amount=-80000,
+        memo=None,
+        cleared=ynab.TransactionClearedStatus.CLEARED,
+        approved=True,
+        flag_color=None,
+        flag_name=None,
+        account_id="acc-1",
+        account_name="Test Account",
+        payee_id=None,
+        payee_name=None,
+        category_id="cat-1",
+        category_name="Test Category",
+        transfer_account_id=None,
+        transfer_transaction_id=None,
+        matched_transaction_id=None,
+        import_id=None,
+        import_payee_name=None,
+        import_payee_name_original=None,
+        debt_transaction_type=None,
+        deleted=False,
+        type="subtransaction",
+        parent_transaction_id="null-payee-parent-id",
+    )
+
+    # Create parent transaction that also has null payee info
+    parent_txn = create_ynab_transaction(
+        id="null-payee-parent-id",
+        transaction_date=date(2025, 8, 11),
+        amount=-80000,
+        memo=None,
+        payee_id=None,  # Parent also has null payee
+        payee_name=None,  # Parent also has null payee
+        category_id=None,
+        category_name="Split",
+    )
+
+    # Mock repository to return both
+    mock_repository.get_transactions_by_filters.return_value = [hybrid_subtxn]
+    mock_repository.get_transactions.return_value = [
+        parent_txn
+    ]  # Parent found but has null payee
+
+    result = await mcp_client.call_tool("list_transactions", {"category_id": "cat-1"})
+
+    response_data = extract_response_data(result)
+    assert response_data is not None
+    assert len(response_data["transactions"]) == 1
+
+    txn = response_data["transactions"][0]
+    assert txn["id"] == "null-payee-subtxn"
+
+    # Should remain null when parent also has null payee
+    assert txn["payee_name"] is None
+    assert txn["payee_id"] is None
+    assert txn["parent_transaction_id"] == "null-payee-parent-id"

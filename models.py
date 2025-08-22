@@ -8,6 +8,7 @@ including detailed explanations of YNAB's data model subtleties and conventions.
 from __future__ import annotations
 
 import datetime
+from collections.abc import Callable
 from decimal import Decimal
 
 import ynab
@@ -291,21 +292,49 @@ class Transaction(BaseTransaction):
         ...,
         description="Whether transaction is approved",
     )
+    parent_transaction_id: str | None = Field(
+        None, description="Parent transaction ID if this is a subtransaction"
+    )
     subtransactions: list[Subtransaction] | None = Field(
         None, description="Subtransactions for splits"
     )
 
     @classmethod
     def from_ynab(
-        cls, txn: ynab.TransactionDetail | ynab.HybridTransaction
+        cls,
+        txn: ynab.TransactionDetail | ynab.HybridTransaction,
+        parent_resolver: Callable[[str], tuple[str | None, str | None]] | None = None,
     ) -> Transaction:
-        """Convert YNAB transaction object to our Transaction model."""
+        """Convert YNAB transaction object to our Transaction model.
+
+        Args:
+            txn: The YNAB transaction object
+            parent_resolver: Optional function to resolve parent payee info by ID
+                           Returns (payee_id, payee_name) tuple
+        """
         # Convert amount from milliunits
         amount = milliunits_to_currency(txn.amount)
 
-        # Get parent transaction payee info
-        parent_payee_id = txn.payee_id
-        parent_payee_name = getattr(txn, "payee_name", None)
+        # Handle HybridTransaction subtransactions that need parent payee resolution
+        payee_id = txn.payee_id
+        payee_name = getattr(txn, "payee_name", None)
+
+        # Check if this is a subtransaction that needs parent payee info
+        if (
+            hasattr(txn, "type")
+            and txn.type == "subtransaction"
+            and not payee_id
+            and not payee_name
+            and hasattr(txn, "parent_transaction_id")
+            and txn.parent_transaction_id
+            and parent_resolver
+        ):
+            resolved_payee_id, resolved_payee_name = parent_resolver(
+                txn.parent_transaction_id
+            )
+            if resolved_payee_id or resolved_payee_name:
+                payee_id = resolved_payee_id
+                payee_name = resolved_payee_name
 
         # Handle subtransactions if present and available
         subtransactions = None
@@ -314,10 +343,8 @@ class Transaction(BaseTransaction):
             for sub in txn.subtransactions:
                 if not sub.deleted:
                     # Inherit parent payee info if subtransaction payee is null
-                    sub_payee_id = sub.payee_id if sub.payee_id else parent_payee_id
-                    sub_payee_name = (
-                        sub.payee_name if sub.payee_name else parent_payee_name
-                    )
+                    sub_payee_id = sub.payee_id if sub.payee_id else payee_id
+                    sub_payee_name = sub.payee_name if sub.payee_name else payee_name
 
                     subtransactions.append(
                         Subtransaction(
@@ -341,10 +368,11 @@ class Transaction(BaseTransaction):
             flag=format_flag(txn.flag_color, getattr(txn, "flag_name", None)),
             account_id=txn.account_id,
             account_name=getattr(txn, "account_name", None),
-            payee_id=parent_payee_id,
-            payee_name=parent_payee_name,
+            payee_id=payee_id,
+            payee_name=payee_name,
             category_id=txn.category_id,
             category_name=getattr(txn, "category_name", None),
+            parent_transaction_id=getattr(txn, "parent_transaction_id", None),
             subtransactions=subtransactions,
         )
 
