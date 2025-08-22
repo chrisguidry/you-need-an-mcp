@@ -52,20 +52,6 @@ def categories_api(ynab_client: MagicMock) -> Generator[MagicMock, None, None]:
 
 
 @pytest.fixture
-def months_api(ynab_client: MagicMock) -> Generator[MagicMock, None, None]:
-    mock_api = Mock(spec=ynab.MonthsApi)
-    with patch("ynab.MonthsApi", return_value=mock_api):
-        yield mock_api
-
-
-@pytest.fixture
-def transactions_api(ynab_client: MagicMock) -> Generator[MagicMock, None, None]:
-    mock_api = Mock(spec=ynab.TransactionsApi)
-    with patch("ynab.TransactionsApi", return_value=mock_api):
-        yield mock_api
-
-
-@pytest.fixture
 async def mcp_client() -> AsyncGenerator[Client[FastMCPTransport], None]:
     """Mock MCP client with proper autospec for testing."""
     async with fastmcp.Client(server.mcp) as client:

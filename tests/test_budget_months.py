@@ -2,12 +2,21 @@
 Test budget month and month category-related MCP tools.
 """
 
+from collections.abc import Generator
 from datetime import date
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, Mock, patch
 
+import pytest
 import ynab
 from assertions import extract_response_data
 from fastmcp.client import Client, FastMCPTransport
+
+
+@pytest.fixture
+def months_api(ynab_client: MagicMock) -> Generator[MagicMock, None, None]:
+    mock_api = Mock(spec=ynab.MonthsApi)
+    with patch("ynab.MonthsApi", return_value=mock_api):
+        yield mock_api
 
 
 async def test_get_budget_month_success(
