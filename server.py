@@ -32,7 +32,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-mcp = FastMCP[None](
+mcp: FastMCP[None] = FastMCP(
     name="YNAB",
     instructions="""
     Gives you access to a user's YNAB budget, including accounts, categories, and

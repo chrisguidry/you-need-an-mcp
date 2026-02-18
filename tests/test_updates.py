@@ -143,7 +143,7 @@ async def test_update_category_budget_success(
     mock_repository.update_month_category.assert_called_once()
     call_args = mock_repository.update_month_category.call_args
     assert call_args[0][0] == "cat-groceries"  # category_id
-    assert call_args[0][1].year == 2025  # current month (from date.today())
+    assert call_args[0][1] == date(date.today().year, date.today().month, 1)
     assert call_args[0][2] == 200_000  # budgeted_milliunits
 
 

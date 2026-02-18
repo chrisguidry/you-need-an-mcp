@@ -1,10 +1,20 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
 [project]
 name = "you-need-an-mcp"
 version = "0.1.0"
-description = "Add your description here"
+description = "MCP server for YNAB (You Need A Budget)"
 readme = "README.md"
 requires-python = ">=3.12"
-dependencies = ["fastmcp>=2.11.3", "pydantic>=2.11.5", "ynab>=1.4.0"]
+dependencies = ["fastmcp>=3.0.0rc2", "pydantic>=2.11.5", "ynab>=1.4.0"]
+
+[project.scripts]
+you-need-an-mcp = "server:mcp.run"
+
+[tool.hatch.build.targets.wheel]
+packages = ["server.py", "models.py", "repository.py"]
 
 [dependency-groups]
 dev = [
