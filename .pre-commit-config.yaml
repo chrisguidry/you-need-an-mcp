@@ -25,6 +25,6 @@ repos:
           - pytest
           - fastmcp
           - pydantic
-          - ynab
+          - "ynab<2"
         args: [--strict, --show-error-codes]
         files: ^(server\.py|models\.py|tests/.+\.py)$

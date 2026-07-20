@@ -1681,7 +1681,7 @@ dev = [
 requires-dist = [
     { name = "fastmcp", specifier = ">=3.4.4" },
     { name = "pydantic", specifier = ">=2.11.5" },
-    { name = "ynab", specifier = ">=1.4.0" },
+    { name = "ynab", specifier = ">=1.8.0,<2" },
 ]
 
 [package.metadata.requires-dev]
