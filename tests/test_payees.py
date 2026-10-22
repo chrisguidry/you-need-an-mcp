@@ -301,3 +301,67 @@ async def test_find_payee_no_matches(
     assert len(response_data["payees"]) == 0
     assert response_data["pagination"]["total_count"] == 0
     assert response_data["pagination"]["has_more"] is False
+
+
+async def test_list_payees_reports_transfer_account(
+    mock_repository: MagicMock, mcp_client: Client[FastMCPTransport]
+) -> None:
+    mock_repository.get_payees.return_value = [
+        create_ynab_payee(
+            id=uid("payee-transfer"),
+            name="Transfer : Savings",
+            transfer_account_id=str(uid("acc-savings")),
+        ),
+        create_ynab_payee(id=uid("payee-store"), name="Store"),
+    ]
+
+    result = await mcp_client.call_tool("list_payees", {})
+
+    payees = extract_response_data(result)["payees"]
+    assert [payee["transfer_account_id"] for payee in payees] == [
+        None,
+        str(uid("acc-savings")),
+    ]
+
+
+async def test_create_payee(
+    mock_repository: MagicMock,
+    payees_api: MagicMock,
+    mcp_client: Client[FastMCPTransport],
+) -> None:
+    payees_api.create_payee.return_value = ynab.SavePayeeResponse(
+        data=ynab.SavePayeeResponseData(
+            payee=create_ynab_payee(id=uid("payee-new"), name="Farmers Market"),
+            server_knowledge=10,
+        )
+    )
+
+    result = await mcp_client.call_tool("create_payee", {"name": "Farmers Market"})
+
+    assert extract_response_data(result)["id"] == str(uid("payee-new"))
+    sent = payees_api.create_payee.call_args.args[1]
+    assert sent == ynab.PostPayeeWrapper(payee=ynab.PostPayee(name="Farmers Market"))
+    mock_repository.mark_stale.assert_called_once_with("payees")
+
+
+async def test_rename_payee(
+    mock_repository: MagicMock,
+    payees_api: MagicMock,
+    mcp_client: Client[FastMCPTransport],
+) -> None:
+    payees_api.update_payee.return_value = ynab.SavePayeeResponse(
+        data=ynab.SavePayeeResponseData(
+            payee=create_ynab_payee(id=uid("payee-amzn"), name="Amazon"),
+            server_knowledge=11,
+        )
+    )
+
+    result = await mcp_client.call_tool(
+        "rename_payee", {"payee_id": str(uid("payee-amzn")), "name": "Amazon"}
+    )
+
+    assert extract_response_data(result)["name"] == "Amazon"
+    plan_id, payee_id, sent = payees_api.update_payee.call_args.args
+    assert (plan_id, payee_id) == ("test_plan_id", str(uid("payee-amzn")))
+    assert sent == ynab.PatchPayeeWrapper(payee=ynab.SavePayee(name="Amazon"))
+    mock_repository.mark_stale.assert_called_once_with("payees", "transactions")

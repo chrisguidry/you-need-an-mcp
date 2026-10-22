@@ -9,7 +9,7 @@ from collections.abc import AsyncGenerator, Generator
 from datetime import date
 from pathlib import Path
 from typing import Any
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import MagicMock, create_autospec, patch
 from uuid import UUID
 
 import fastmcp
@@ -21,41 +21,78 @@ from ids import uid
 # Add parent directory to path to import server module
 sys.path.insert(0, str(Path(__file__).parent.parent))
 import server
-
-
-@pytest.fixture
-def mock_environment_variables(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Mock environment variables for testing."""
-    monkeypatch.setenv("YNAB_ACCESS_TOKEN", "test_token_123")
-    monkeypatch.setenv("YNAB_BUDGET", "test_budget_id")
-
-
-@pytest.fixture
-def ynab_client(mock_environment_variables: None) -> Generator[MagicMock, None, None]:
-    """Mock YNAB client with proper autospec for testing."""
-    mock_client = MagicMock(spec=ynab.ApiClient)
-    mock_client.__enter__.return_value = mock_client
-    mock_client.__exit__.return_value = None
-    yield mock_client
+from repository import YNABRepository
 
 
 @pytest.fixture
 def mock_repository() -> Generator[MagicMock, None, None]:
-    """Mock the repository to prevent API calls during testing."""
-    with patch("server._repository") as mock_repo:
-        yield mock_repo
+    """Give every tool a mock repository in place of the one plan_repository builds.
+
+    The mock has the real repository's interface, so a test that calls a method
+    the repository does not have fails.  Its api() opens a client that the
+    patched ynab API classes below receive.
+    """
+    repository = create_autospec(YNABRepository, instance=True)
+    repository.plan_id = "test_plan_id"
+    repository.api.return_value.__enter__.return_value = MagicMock(spec=ynab.ApiClient)
+    with patch("repository.YNABRepository", return_value=repository):
+        yield repository
+
+
+def patched_api[T](api_class: type[T]) -> Generator[T, None, None]:
+    """Replace one ynab API class with a mock that has its interface."""
+    api = create_autospec(api_class, instance=True)
+    with patch(f"ynab.{api_class.__name__}", return_value=api):
+        yield api
 
 
 @pytest.fixture
-def categories_api(ynab_client: MagicMock) -> Generator[MagicMock, None, None]:
-    mock_api = Mock(spec=ynab.CategoriesApi)
-    with patch("ynab.CategoriesApi", return_value=mock_api):
-        yield mock_api
+def accounts_api() -> Generator[ynab.AccountsApi, None, None]:
+    yield from patched_api(ynab.AccountsApi)
 
 
 @pytest.fixture
-async def mcp_client() -> AsyncGenerator[Client[FastMCPTransport], None]:
-    """Mock MCP client with proper autospec for testing."""
+def categories_api() -> Generator[ynab.CategoriesApi, None, None]:
+    yield from patched_api(ynab.CategoriesApi)
+
+
+@pytest.fixture
+def months_api() -> Generator[ynab.MonthsApi, None, None]:
+    yield from patched_api(ynab.MonthsApi)
+
+
+@pytest.fixture
+def money_movements_api() -> Generator[ynab.MoneyMovementsApi, None, None]:
+    yield from patched_api(ynab.MoneyMovementsApi)
+
+
+@pytest.fixture
+def payees_api() -> Generator[ynab.PayeesApi, None, None]:
+    yield from patched_api(ynab.PayeesApi)
+
+
+@pytest.fixture
+def plans_api() -> Generator[ynab.PlansApi, None, None]:
+    yield from patched_api(ynab.PlansApi)
+
+
+@pytest.fixture
+def transactions_api() -> Generator[ynab.TransactionsApi, None, None]:
+    yield from patched_api(ynab.TransactionsApi)
+
+
+@pytest.fixture
+def scheduled_transactions_api() -> Generator[
+    ynab.ScheduledTransactionsApi, None, None
+]:
+    yield from patched_api(ynab.ScheduledTransactionsApi)
+
+
+@pytest.fixture
+async def mcp_client(
+    mock_repository: MagicMock,
+) -> AsyncGenerator[Client[FastMCPTransport], None]:
+    """An MCP client connected in memory to the server, with a mock repository."""
     async with fastmcp.Client(server.mcp) as client:
         yield client
 
@@ -186,4 +223,98 @@ def create_ynab_transaction(
         debt_transaction_type=kwargs.get("debt_transaction_type"),
         deleted=deleted,
         subtransactions=kwargs.get("subtransactions", []),
+    )
+
+
+def create_ynab_category_group(
+    *,
+    id: UUID = uid("group-1"),
+    name: str = "Test Group",
+    categories: list[ynab.Category] | None = None,
+    hidden: bool = False,
+    deleted: bool = False,
+) -> ynab.CategoryGroupWithCategories:
+    """Create a YNAB category group for testing with sensible defaults."""
+    return ynab.CategoryGroupWithCategories(
+        id=id,
+        name=name,
+        hidden=hidden,
+        internal=False,
+        deleted=deleted,
+        categories=categories or [],
+    )
+
+
+def saved_category(category: ynab.Category) -> ynab.SaveCategoryResponse:
+    """Wrap a category the way YNAB answers a create or update."""
+    return ynab.SaveCategoryResponse(
+        data=ynab.SaveCategoryResponseData(category=category, server_knowledge=1)
+    )
+
+
+def transaction_response(txn: ynab.TransactionDetail) -> ynab.TransactionResponse:
+    return ynab.TransactionResponse(
+        data=ynab.TransactionResponseData(transaction=txn, server_knowledge=1)
+    )
+
+
+def scheduled_transaction(
+    *,
+    id: UUID = uid("st-rent"),
+    date_first: date = date(2024, 1, 1),
+    date_next: date = date(2024, 2, 1),
+    frequency: str = "monthly",
+    amount: int = -1_500_000,
+    memo: str | None = "Rent",
+    flag_color: ynab.TransactionFlagColor | None = None,
+    flag_name: str | None = None,
+    account_id: UUID = uid("acc-checking"),
+    payee_id: UUID | None = uid("payee-landlord"),
+    category_id: UUID | None = uid("cat-rent"),
+    transfer_account_id: UUID | None = None,
+    deleted: bool = False,
+    subtransactions: list[ynab.ScheduledSubTransaction] | None = None,
+) -> ynab.ScheduledTransactionDetail:
+    """Build a YNAB scheduled transaction, by default a monthly rent payment."""
+    return ynab.ScheduledTransactionDetail(
+        id=id,
+        date_first=date_first,
+        date_next=date_next,
+        frequency=frequency,
+        amount=amount,
+        memo=memo,
+        flag_color=flag_color,
+        flag_name=flag_name,
+        account_id=account_id,
+        account_name="Checking",
+        payee_id=payee_id,
+        payee_name="Landlord",
+        category_id=category_id,
+        category_name="Rent",
+        transfer_account_id=transfer_account_id,
+        deleted=deleted,
+        subtransactions=subtransactions or [],
+    )
+
+
+def scheduled_part(
+    name: str, amount: int, *, deleted: bool = False
+) -> ynab.ScheduledSubTransaction:
+    """Build one part of a split scheduled transaction."""
+    return ynab.ScheduledSubTransaction(
+        id=uid(name),
+        scheduled_transaction_id=uid("st-rent"),
+        amount=amount,
+        memo=name,
+        category_id=uid(f"cat-{name}"),
+        category_name=name.title(),
+        deleted=deleted,
+    )
+
+
+def scheduled_response(
+    detail: ynab.ScheduledTransactionDetail,
+) -> ynab.ScheduledTransactionResponse:
+    return ynab.ScheduledTransactionResponse(
+        data=ynab.ScheduledTransactionResponseData(scheduled_transaction=detail)
     )

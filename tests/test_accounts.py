@@ -304,3 +304,77 @@ async def test_list_accounts_with_debt_fields(
     assert checking["debt_interest_rates"] is None
     assert checking["debt_minimum_payments"] is None
     assert checking["debt_escrow_amounts"] is None
+
+
+async def test_list_accounts_includes_closed_accounts_when_asked(
+    mock_repository: MagicMock,
+    mcp_client: Client[FastMCPTransport],
+) -> None:
+    mock_repository.get_accounts.return_value = [
+        create_ynab_account(id=uid("acc-open"), name="Checking"),
+        create_ynab_account(id=uid("acc-closed"), name="Old Savings", closed=True),
+    ]
+
+    result = await mcp_client.call_tool("list_accounts", {"include_closed": True})
+
+    accounts = extract_response_data(result)["accounts"]
+    assert [account["name"] for account in accounts] == ["Checking", "Old Savings"]
+
+
+async def test_list_accounts_excludes_deleted_accounts(
+    mock_repository: MagicMock,
+    mcp_client: Client[FastMCPTransport],
+) -> None:
+    mock_repository.get_accounts.return_value = [
+        create_ynab_account(id=uid("acc-open"), name="Checking"),
+        create_ynab_account(id=uid("acc-gone"), name="Gone", deleted=True),
+    ]
+
+    result = await mcp_client.call_tool("list_accounts", {"include_closed": True})
+
+    accounts = extract_response_data(result)["accounts"]
+    assert [account["name"] for account in accounts] == ["Checking"]
+
+
+async def test_list_accounts_reports_transfer_payee(
+    mock_repository: MagicMock,
+    mcp_client: Client[FastMCPTransport],
+) -> None:
+    mock_repository.get_accounts.return_value = [
+        create_ynab_account(transfer_payee_id=uid("payee-to-checking"))
+    ]
+
+    result = await mcp_client.call_tool("list_accounts", {})
+
+    account = extract_response_data(result)["accounts"][0]
+    assert account["transfer_payee_id"] == str(uid("payee-to-checking"))
+
+
+async def test_create_account(
+    mock_repository: MagicMock,
+    accounts_api: MagicMock,
+    mcp_client: Client[FastMCPTransport],
+) -> None:
+    accounts_api.create_account.return_value = ynab.AccountResponse(
+        data=ynab.AccountResponseData(
+            account=create_ynab_account(
+                id=uid("acc-wallet"),
+                name="Wallet",
+                account_type=ynab.AccountType.CASH,
+                balance=40_000,
+            )
+        )
+    )
+
+    result = await mcp_client.call_tool(
+        "create_account", {"name": "Wallet", "type": "cash", "balance": "40.00"}
+    )
+
+    account = extract_response_data(result)
+    assert account["id"] == str(uid("acc-wallet"))
+    assert account["balance"] == "40"
+    sent = accounts_api.create_account.call_args.args[1].account
+    assert sent == ynab.SaveAccount(
+        name="Wallet", type=ynab.SaveAccountType.CASH, balance=40_000
+    )
+    mock_repository.mark_stale.assert_called_once()

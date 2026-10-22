@@ -12,7 +12,7 @@ from uuid import UUID
 
 import pytest
 import ynab
-from conftest import create_ynab_account, create_ynab_payee
+from conftest import create_ynab_account, create_ynab_category_group, create_ynab_payee
 from ids import uid
 from ynab.exceptions import ConflictException
 
@@ -22,7 +22,7 @@ from repository import YNABRepository
 @pytest.fixture
 def repository() -> YNABRepository:
     """Create a repository instance for testing."""
-    repo = YNABRepository(budget_id="test-budget", access_token="test-token")
+    repo = YNABRepository(plan_id="test-budget", access_token="test-token")
 
     # Disable background sync by default to prevent real API calls during tests
     repo._background_sync_enabled = False
@@ -399,25 +399,6 @@ def test_repository_payees_lazy_initialization(repository: YNABRepository) -> No
     # Verify data is available
     assert len(payees) == 1
     assert payees[0].id == uid("payee-1")
-
-
-def create_ynab_category_group(
-    *,
-    id: UUID = uid("group-1"),
-    name: str = "Test Group",
-    deleted: bool = False,
-    **kwargs: Any,
-) -> ynab.CategoryGroupWithCategories:
-    """Create a YNAB CategoryGroupWithCategories for testing with sensible defaults."""
-    categories = kwargs.get("categories", [])
-    return ynab.CategoryGroupWithCategories(
-        internal=False,
-        id=id,
-        name=name,
-        hidden=kwargs.get("hidden", False),
-        deleted=deleted,
-        categories=categories,
-    )
 
 
 def test_repository_category_groups_initial_sync(repository: YNABRepository) -> None:

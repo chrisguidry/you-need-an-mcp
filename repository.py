@@ -5,10 +5,12 @@ Provides local-first access to YNAB data with background synchronization.
 """
 
 import logging
+import os
 import threading
 import time
-from collections.abc import Callable
-from datetime import date, datetime
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
+from datetime import datetime
 from typing import Any
 
 import ynab
@@ -16,12 +18,42 @@ from ynab.exceptions import ApiException, ConflictException
 
 logger = logging.getLogger(__name__)
 
+# YNAB answers in well under a second.  A request that has not finished in
+# this long is stuck, and a tool that waits on it forever hangs its client.
+REQUEST_TIMEOUT_SECONDS = 30.0
+
+
+class TimeoutApiClient(ynab.ApiClient):
+    """A YNAB API client with a default request timeout.
+
+    The generated SDK sends requests with no timeout unless each call passes
+    one, so this applies one to every call that does not.
+    """
+
+    def call_api(
+        self,
+        method: str,
+        url: str,
+        header_params: dict[str, str] | None = None,
+        body: Any = None,
+        post_params: list[tuple[str, Any]] | None = None,
+        _request_timeout: Any = None,
+    ) -> ynab.rest.RESTResponse:
+        return super().call_api(
+            method,
+            url,
+            header_params=header_params,
+            body=body,
+            post_params=post_params,
+            _request_timeout=_request_timeout or REQUEST_TIMEOUT_SECONDS,
+        )
+
 
 class YNABRepository:
     """Local repository for YNAB data with background differential sync."""
 
-    def __init__(self, budget_id: str, access_token: str):
-        self.budget_id = budget_id
+    def __init__(self, plan_id: str, access_token: str):
+        self.plan_id = plan_id
         self.configuration = ynab.Configuration(access_token=access_token)
 
         # In-memory storage - generic dict for different entity types
@@ -29,67 +61,64 @@ class YNABRepository:
         self._server_knowledge: dict[str, int] = {}
         self._lock = threading.RLock()
         self._last_sync: datetime | None = None
+        self._stale: set[str] = set()
 
         # Testing flag to disable background sync
         self._background_sync_enabled = True
 
     def get_accounts(self) -> list[ynab.Account]:
         """Get all accounts from local repository."""
-        with self._lock:
-            # If no data exists, do synchronous sync (first time)
-            if "accounts" not in self._data:
-                logger.info("No accounts data - performing initial sync")
-                self.sync_accounts()
-            # If data exists but is stale, trigger background sync
-            elif self.needs_sync():
-                logger.info("Accounts data is stale - triggering background sync")
-                self._trigger_background_sync("accounts")
-
-            return self._data.get("accounts", [])
+        return self._get_entity("accounts", self.sync_accounts)
 
     def get_payees(self) -> list[ynab.Payee]:
         """Get all payees from local repository."""
-        with self._lock:
-            # If no data exists, do synchronous sync (first time)
-            if "payees" not in self._data:
-                logger.info("No payees data - performing initial sync")
-                self.sync_payees()
-            # If data exists but is stale, trigger background sync
-            elif self.needs_sync():
-                logger.info("Payees data is stale - triggering background sync")
-                self._trigger_background_sync("payees")
-
-            return self._data.get("payees", [])
+        return self._get_entity("payees", self.sync_payees)
 
     def get_category_groups(self) -> list[ynab.CategoryGroupWithCategories]:
         """Get all category groups from local repository."""
-        with self._lock:
-            # If no data exists, do synchronous sync (first time)
-            if "category_groups" not in self._data:
-                logger.info("No category groups data - performing initial sync")
-                self.sync_category_groups()
-            # If data exists but is stale, trigger background sync
-            elif self.needs_sync():
-                logger.info(
-                    "Category groups data is stale - triggering background sync"
-                )
-                self._trigger_background_sync("category_groups")
-
-            return self._data.get("category_groups", [])
+        return self._get_entity("category_groups", self.sync_category_groups)
 
     def get_transactions(self) -> list[ynab.TransactionDetail]:
         """Get all transactions from local repository."""
-        with self._lock:
-            # If no data exists, do synchronous sync (first time)
-            if "transactions" not in self._data:
-                logger.info("No transactions data - performing initial sync")
-                self.sync_transactions()
-            # If data exists but is stale, trigger background sync
-            elif self.needs_sync():
-                logger.info("Transactions data is stale - triggering background sync")
-                self._trigger_background_sync("transactions")
+        return self._get_entity("transactions", self.sync_transactions)
 
-            return self._data.get("transactions", [])
+    def _get_entity(self, entity_type: str, sync: Callable[[], None]) -> list[Any]:
+        """Serve an entity list from memory, syncing it first when it must be.
+
+        The first read syncs in the foreground, because there is nothing to
+        serve yet.  A read after one of our own writes also syncs in the
+        foreground, so that the caller sees the change it just made.  A read
+        of data that is only old syncs in the background and serves what is
+        already here.
+        """
+        with self._lock:
+            if entity_type not in self._data:
+                logger.info(f"No {entity_type} data - performing initial sync")
+                sync()
+            elif entity_type in self._stale:
+                logger.info(f"{entity_type} changed by a write - syncing now")
+                sync()
+            elif self.needs_sync():
+                logger.info(f"{entity_type} data is stale - triggering background sync")
+                self._trigger_background_sync(entity_type)
+
+            return self._data.get(entity_type, [])
+
+    def mark_stale(self, *entity_types: str) -> None:
+        """Record that a write changed these entities on the server.
+
+        The next read of each one runs a delta sync before it answers.  The
+        delta sync starts from the server knowledge we already hold, so it
+        fetches only what changed rather than the whole plan.
+        """
+        with self._lock:
+            self._stale.update(entity_types)
+
+    @contextmanager
+    def api(self) -> Iterator[ynab.ApiClient]:
+        """Open a YNAB API client that gives up on a request after a timeout."""
+        with TimeoutApiClient(self.configuration) as api_client:
+            yield api_client
 
     def sync_accounts(self) -> None:
         """Sync accounts with YNAB API using differential sync."""
@@ -111,165 +140,105 @@ class YNABRepository:
         self, last_knowledge: int | None
     ) -> tuple[list[ynab.Account], int]:
         """Fetch accounts from YNAB API with optional server knowledge."""
-        with ynab.ApiClient(self.configuration) as api_client:
-            accounts_api = ynab.AccountsApi(api_client)
+        with self.api() as api_client:
+            api = ynab.AccountsApi(api_client)
 
-            if last_knowledge is not None:
-                try:
-                    # Try delta sync first
-                    response = self._handle_api_call_with_retry(
-                        lambda: accounts_api.get_accounts(
-                            self.budget_id, last_knowledge_of_server=last_knowledge
-                        )
+            def fetch(knowledge: int | None) -> tuple[list[ynab.Account], int]:
+                if knowledge is None:
+                    response = api.get_accounts(self.plan_id)
+                else:
+                    response = api.get_accounts(
+                        self.plan_id, last_knowledge_of_server=knowledge
                     )
-                except ConflictException as e:
-                    # Fall back to full sync on stale knowledge
-                    logger.info(
-                        f"Falling back to full accounts sync due to conflict: {e}"
-                    )
-                    response = self._handle_api_call_with_retry(
-                        lambda: accounts_api.get_accounts(self.budget_id)
-                    )
-                except ApiException as e:
-                    # Log API error and fall back to full sync
-                    logger.warning(f"API error during accounts delta sync: {e}")
-                    response = self._handle_api_call_with_retry(
-                        lambda: accounts_api.get_accounts(self.budget_id)
-                    )
-                except Exception as e:
-                    # Log unexpected error and re-raise
-                    logger.error(f"Unexpected error during accounts delta sync: {e}")
-                    raise
-            else:
-                response = self._handle_api_call_with_retry(
-                    lambda: accounts_api.get_accounts(self.budget_id)
-                )
+                return list(response.data.accounts), response.data.server_knowledge
 
-            return list(response.data.accounts), response.data.server_knowledge
+            return self._fetch_entities("accounts", last_knowledge, fetch)
 
     def _sync_payees_from_api(
         self, last_knowledge: int | None
     ) -> tuple[list[ynab.Payee], int]:
         """Fetch payees from YNAB API with optional server knowledge."""
-        with ynab.ApiClient(self.configuration) as api_client:
-            payees_api = ynab.PayeesApi(api_client)
+        with self.api() as api_client:
+            api = ynab.PayeesApi(api_client)
 
-            if last_knowledge is not None:
-                try:
-                    # Try delta sync first
-                    response = self._handle_api_call_with_retry(
-                        lambda: payees_api.get_payees(
-                            self.budget_id, last_knowledge_of_server=last_knowledge
-                        )
+            def fetch(knowledge: int | None) -> tuple[list[ynab.Payee], int]:
+                if knowledge is None:
+                    response = api.get_payees(self.plan_id)
+                else:
+                    response = api.get_payees(
+                        self.plan_id, last_knowledge_of_server=knowledge
                     )
-                except ConflictException as e:
-                    # Fall back to full sync on stale knowledge
-                    logger.info(
-                        f"Falling back to full payees sync due to conflict: {e}"
-                    )
-                    response = self._handle_api_call_with_retry(
-                        lambda: payees_api.get_payees(self.budget_id)
-                    )
-                except ApiException as e:
-                    # Log API error and fall back to full sync
-                    logger.warning(f"API error during payees delta sync: {e}")
-                    response = self._handle_api_call_with_retry(
-                        lambda: payees_api.get_payees(self.budget_id)
-                    )
-                except Exception as e:
-                    # Log unexpected error and re-raise
-                    logger.error(f"Unexpected error during payees delta sync: {e}")
-                    raise
-            else:
-                response = self._handle_api_call_with_retry(
-                    lambda: payees_api.get_payees(self.budget_id)
-                )
+                return list(response.data.payees), response.data.server_knowledge
 
-            return list(response.data.payees), response.data.server_knowledge
+            return self._fetch_entities("payees", last_knowledge, fetch)
 
     def _sync_category_groups_from_api(
         self, last_knowledge: int | None
     ) -> tuple[list[ynab.CategoryGroupWithCategories], int]:
         """Fetch category groups from YNAB API with optional server knowledge."""
-        with ynab.ApiClient(self.configuration) as api_client:
-            categories_api = ynab.CategoriesApi(api_client)
+        with self.api() as api_client:
+            api = ynab.CategoriesApi(api_client)
 
-            if last_knowledge is not None:
-                try:
-                    # Try delta sync first
-                    response = self._handle_api_call_with_retry(
-                        lambda: categories_api.get_categories(
-                            self.budget_id, last_knowledge_of_server=last_knowledge
-                        )
+            def fetch(
+                knowledge: int | None,
+            ) -> tuple[list[ynab.CategoryGroupWithCategories], int]:
+                if knowledge is None:
+                    response = api.get_categories(self.plan_id)
+                else:
+                    response = api.get_categories(
+                        self.plan_id, last_knowledge_of_server=knowledge
                     )
-                except ConflictException as e:
-                    # Fall back to full sync on stale knowledge
-                    logger.info(
-                        f"Category groups conflict, falling back to full sync: {e}"
-                    )
-                    response = self._handle_api_call_with_retry(
-                        lambda: categories_api.get_categories(self.budget_id)
-                    )
-                except ApiException as e:
-                    # Log API error and fall back to full sync
-                    logger.warning(f"API error during category groups delta sync: {e}")
-                    response = self._handle_api_call_with_retry(
-                        lambda: categories_api.get_categories(self.budget_id)
-                    )
-                except Exception as e:
-                    # Log unexpected error and re-raise
-                    logger.error(
-                        f"Unexpected error during category groups delta sync: {e}"
-                    )
-                    raise
-            else:
-                response = self._handle_api_call_with_retry(
-                    lambda: categories_api.get_categories(self.budget_id)
+                return (
+                    list(response.data.category_groups),
+                    response.data.server_knowledge,
                 )
 
-            return list(response.data.category_groups), response.data.server_knowledge
+            return self._fetch_entities("category groups", last_knowledge, fetch)
 
     def _sync_transactions_from_api(
         self, last_knowledge: int | None
     ) -> tuple[list[ynab.TransactionDetail], int]:
         """Fetch transactions from YNAB API with optional server knowledge."""
-        with ynab.ApiClient(self.configuration) as api_client:
-            transactions_api = ynab.TransactionsApi(api_client)
+        with self.api() as api_client:
+            api = ynab.TransactionsApi(api_client)
 
-            if last_knowledge is not None:
-                try:
-                    # Try delta sync first
-                    response = self._handle_api_call_with_retry(
-                        lambda: transactions_api.get_transactions(
-                            self.budget_id, last_knowledge_of_server=last_knowledge
-                        )
+            def fetch(
+                knowledge: int | None,
+            ) -> tuple[list[ynab.TransactionDetail], int]:
+                if knowledge is None:
+                    response = api.get_transactions(self.plan_id)
+                else:
+                    response = api.get_transactions(
+                        self.plan_id, last_knowledge_of_server=knowledge
                     )
-                except ConflictException as e:
-                    # Fall back to full sync on stale knowledge
-                    logger.info(
-                        f"Falling back to full transactions sync due to conflict: {e}"
-                    )
-                    response = self._handle_api_call_with_retry(
-                        lambda: transactions_api.get_transactions(self.budget_id)
-                    )
-                except ApiException as e:
-                    # Log API error and fall back to full sync
-                    logger.warning(f"API error during transactions delta sync: {e}")
-                    response = self._handle_api_call_with_retry(
-                        lambda: transactions_api.get_transactions(self.budget_id)
-                    )
-                except Exception as e:
-                    # Log unexpected error and re-raise
-                    logger.error(
-                        f"Unexpected error during transactions delta sync: {e}"
-                    )
-                    raise
-            else:
-                response = self._handle_api_call_with_retry(
-                    lambda: transactions_api.get_transactions(self.budget_id)
+                return (
+                    list(response.data.transactions),
+                    response.data.server_knowledge,
                 )
 
-            return list(response.data.transactions), response.data.server_knowledge
+            return self._fetch_entities("transactions", last_knowledge, fetch)
+
+    def _fetch_entities[T](
+        self,
+        entity_name: str,
+        last_knowledge: int | None,
+        fetch: Callable[[int | None], tuple[list[T], int]],
+    ) -> tuple[list[T], int]:
+        """Fetch only the changes since last_knowledge, or everything.
+
+        YNAB refuses a delta when our server knowledge is too old, and any
+        other failed delta leaves us unsure what changed.  Either way, fetching
+        everything again gets us back to a state we can trust.
+        """
+        if last_knowledge is None:
+            return self._handle_api_call_with_retry(lambda: fetch(None))
+        try:
+            return self._handle_api_call_with_retry(lambda: fetch(last_knowledge))
+        except ConflictException as e:
+            logger.info(f"Falling back to full {entity_name} sync due to conflict: {e}")
+        except ApiException as e:
+            logger.warning(f"API error during {entity_name} delta sync: {e}")
+        return self._handle_api_call_with_retry(lambda: fetch(None))
 
     def _sync_entity(
         self, entity_type: str, sync_func: Callable[[int | None], tuple[list[Any], int]]
@@ -292,6 +261,7 @@ class YNABRepository:
 
             # Update metadata
             self._server_knowledge[entity_type] = new_knowledge
+            self._stale.discard(entity_type)
             self._last_sync = datetime.now()
 
     def _apply_deltas(self, entity_type: str, delta_entities: list[Any]) -> None:
@@ -339,16 +309,15 @@ class YNABRepository:
             "payees": self.sync_payees,
             "category_groups": self.sync_category_groups,
             "transactions": self.sync_transactions,
-        }.get(entity_type)
+        }[entity_type]
 
-        if sync_method:
-            sync_thread = threading.Thread(
-                target=self._background_sync_entity,
-                args=(entity_type, sync_method),
-                daemon=True,
-                name=f"ynab-sync-{entity_type}",
-            )
-            sync_thread.start()
+        sync_thread = threading.Thread(
+            target=self._background_sync_entity,
+            args=(entity_type, sync_method),
+            daemon=True,
+            name=f"ynab-sync-{entity_type}",
+        )
+        sync_thread.start()
 
     def _background_sync_entity(
         self, entity_type: str, sync_method: Callable[[], None]
@@ -362,147 +331,40 @@ class YNABRepository:
             logger.error(f"Background sync failed for {entity_type}: {e}")
             # Continue serving stale data on error
 
-    def _handle_api_call_with_retry(
-        self, api_call: Callable[[], Any], max_retries: int = 3
-    ) -> Any:
-        """Handle API call with exponential backoff for rate limiting."""
-        for attempt in range(max_retries):
+    def _handle_api_call_with_retry[T](
+        self, api_call: Callable[[], T], max_retries: int = 3
+    ) -> T:
+        """Call the YNAB API, backing off and retrying when rate limited.
+
+        YNAB allows 200 requests an hour.  Any other error, including the
+        conflict that tells a delta sync to start over, goes to the caller.
+        """
+        attempt = 0
+        while True:
             try:
                 return api_call()
-            except ConflictException:
-                # Let the calling method handle ConflictException for fallback logic
-                raise
             except ApiException as e:
-                if e.status == 429:
-                    # Rate limited - YNAB allows 200 requests/hour
-                    wait_time = 2**attempt
-                    logger.warning(
-                        f"Rate limited - waiting {wait_time}s (retry {attempt + 1})"
-                    )
-                    if attempt < max_retries - 1:
-                        time.sleep(wait_time)
-                        continue
-                    else:
-                        logger.error("Max retries exceeded for rate limiting")
-                        raise
-                else:
-                    # Other API error - don't retry, let caller handle
+                if e.status != 429:
                     logger.error(f"API error {e.status}: {e}")
                     raise
-            except Exception as e:
-                logger.error(f"Unexpected error during API call: {e}")
-                raise
-
-    def update_month_category(
-        self, category_id: str, month: date, budgeted_milliunits: int
-    ) -> ynab.Category:
-        """Update a category's budget for a specific month."""
-        with ynab.ApiClient(self.configuration) as api_client:
-            categories_api = ynab.CategoriesApi(api_client)
-
-            save_month_category = ynab.SaveMonthCategory(budgeted=budgeted_milliunits)
-            patch_wrapper = ynab.PatchMonthCategoryWrapper(category=save_month_category)
-
-            response = categories_api.update_month_category(
-                self.budget_id, month, category_id, patch_wrapper
-            )
-
-            # Invalidate category groups cache since budget amounts changed
-            with self._lock:
-                if "category_groups" in self._data:
-                    del self._data["category_groups"]
-                if "category_groups" in self._server_knowledge:
-                    del self._server_knowledge["category_groups"]
-
-            return response.data.category
-
-    def update_transaction(
-        self, transaction_id: str, update_data: dict[str, Any]
-    ) -> ynab.TransactionDetail:
-        """Update a transaction with the provided data."""
-        with ynab.ApiClient(self.configuration) as api_client:
-            transactions_api = ynab.TransactionsApi(api_client)
-
-            # Create the save transaction object
-            existing_transaction = ynab.ExistingTransaction(**update_data)
-            put_wrapper = ynab.PutTransactionWrapper(transaction=existing_transaction)
-
-            response = transactions_api.update_transaction(
-                self.budget_id, transaction_id, put_wrapper
-            )
-
-            # Invalidate transactions cache since transaction was modified
-            with self._lock:
-                if "transactions" in self._data:
-                    del self._data["transactions"]
-                if "transactions" in self._server_knowledge:
-                    del self._server_knowledge["transactions"]
-
-            return response.data.transaction
-
-    def get_transaction_by_id(self, transaction_id: str) -> ynab.TransactionDetail:
-        """Get a specific transaction by ID."""
-        with ynab.ApiClient(self.configuration) as api_client:
-            transactions_api = ynab.TransactionsApi(api_client)
-            response = transactions_api.get_transaction_by_id(
-                self.budget_id, transaction_id
-            )
-            return response.data.transaction
-
-    def get_transactions_by_filters(
-        self,
-        account_id: str | None = None,
-        category_id: str | None = None,
-        payee_id: str | None = None,
-        since_date: date | None = None,
-    ) -> list[ynab.TransactionDetail | ynab.HybridTransaction]:
-        """Get transactions using specific YNAB API endpoints for filtering."""
-        with ynab.ApiClient(self.configuration) as api_client:
-            transactions_api = ynab.TransactionsApi(api_client)
-
-            if account_id:
-                account_response = transactions_api.get_transactions_by_account(
-                    self.budget_id, account_id, since_date=since_date, type=None
+                if attempt >= max_retries - 1:
+                    logger.error("Max retries exceeded for rate limiting")
+                    raise
+                wait_time = 2**attempt
+                logger.warning(
+                    f"Rate limited - waiting {wait_time}s (retry {attempt + 1})"
                 )
-                return list(account_response.data.transactions)
-            elif category_id:
-                category_response = transactions_api.get_transactions_by_category(
-                    self.budget_id, category_id, since_date=since_date, type=None
-                )
-                return list(category_response.data.transactions)
-            elif payee_id:
-                payee_response = transactions_api.get_transactions_by_payee(
-                    self.budget_id, payee_id, since_date=since_date, type=None
-                )
-                return list(payee_response.data.transactions)
-            else:
-                # Use general transactions endpoint
-                general_response = transactions_api.get_transactions(
-                    self.budget_id, since_date=since_date, type=None
-                )
-                return list(general_response.data.transactions)
+                time.sleep(wait_time)
+                attempt += 1
 
-    def get_scheduled_transactions(self) -> list[ynab.ScheduledTransactionDetail]:
-        """Get scheduled transactions."""
-        with ynab.ApiClient(self.configuration) as api_client:
-            scheduled_transactions_api = ynab.ScheduledTransactionsApi(api_client)
-            response = scheduled_transactions_api.get_scheduled_transactions(
-                self.budget_id
-            )
-            return list(response.data.scheduled_transactions)
 
-    def get_month_category_by_id(self, month: date, category_id: str) -> ynab.Category:
-        """Get a specific category for a specific month."""
-        with ynab.ApiClient(self.configuration) as api_client:
-            categories_api = ynab.CategoriesApi(api_client)
-            response = categories_api.get_month_category_by_id(
-                self.budget_id, month, category_id
-            )
-            return response.data.category
+def plan_repository() -> YNABRepository:
+    """Build the repository for the plan this server is configured for.
 
-    def get_budget_month(self, month: date) -> ynab.MonthDetail:
-        """Get budget month data for a specific month."""
-        with ynab.ApiClient(self.configuration) as api_client:
-            months_api = ynab.MonthsApi(api_client)
-            response = months_api.get_plan_month(self.budget_id, month)
-            return response.data.month
+    Tools receive it through FastMCP's Shared dependency, so the server builds
+    one repository for its whole lifetime and every tool reads the same cache.
+    """
+    return YNABRepository(
+        plan_id=os.environ["YNAB_PLAN"],
+        access_token=os.environ["YNAB_ACCESS_TOKEN"],
+    )

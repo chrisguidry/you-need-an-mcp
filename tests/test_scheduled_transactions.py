@@ -1,777 +1,430 @@
 """
-Tests for scheduled transaction functionality in YNAB MCP Server.
-
-Tests the list_scheduled_transactions tool with various filters and scenarios.
+Test the tools that list, get, create, update, and delete scheduled transactions.
 """
 
-from datetime import date
+from datetime import date, timedelta
+from typing import Any
 from unittest.mock import MagicMock
 
+import pytest
 import ynab
-from assertions import extract_response_data
+from assertions import assert_pagination_info, extract_response_data
+from conftest import (
+    create_ynab_account,
+    scheduled_part,
+    scheduled_response,
+    scheduled_transaction,
+)
 from fastmcp.client import Client, FastMCPTransport
+from fastmcp.exceptions import ToolError
 from ids import uid
 
 
-async def test_list_scheduled_transactions_basic(
-    mock_repository: MagicMock,
+def scheduled_list(
+    *details: ynab.ScheduledTransactionDetail,
+) -> ynab.ScheduledTransactionsResponse:
+    return ynab.ScheduledTransactionsResponse(
+        data=ynab.ScheduledTransactionsResponseData(
+            scheduled_transactions=list(details), server_knowledge=1
+        )
+    )
+
+
+@pytest.fixture
+def bills(scheduled_transactions_api: MagicMock) -> None:
+    """Three schedules, out of order, with the rent overdue, and a deleted one."""
+    today = date.today()
+    scheduled_transactions_api.get_scheduled_transactions.return_value = scheduled_list(
+        scheduled_transaction(
+            id=uid("st-coffee"),
+            date_next=today + timedelta(days=10),
+            frequency="weekly",
+            amount=-5_000,
+            account_id=uid("acc-credit"),
+            payee_id=uid("payee-cafe"),
+            category_id=uid("cat-dining"),
+        ),
+        scheduled_transaction(
+            id=uid("st-gone"),
+            date_next=today + timedelta(days=1),
+            deleted=True,
+        ),
+        scheduled_transaction(
+            id=uid("st-paycheck"),
+            date_next=today + timedelta(days=20),
+            frequency="everyOtherWeek",
+            amount=2_000_000,
+            payee_id=uid("payee-employer"),
+            category_id=uid("cat-income"),
+        ),
+        scheduled_transaction(
+            id=uid("st-rent"),
+            date_next=today - timedelta(days=2),
+        ),
+    )
+
+
+async def test_list_scheduled_transactions_soonest_first_without_deleted(
+    bills: None,
     mcp_client: Client[FastMCPTransport],
 ) -> None:
-    """Test basic scheduled transaction listing without filters."""
-
-    st1 = ynab.ScheduledTransactionDetail(
-        id=uid("st-1"),
-        date_first=date(2024, 1, 1),
-        date_next=date(2024, 2, 1),
-        frequency="monthly",
-        amount=-120_000,  # -$120.00 outflow
-        memo="Netflix subscription",
-        flag_color=ynab.TransactionFlagColor.RED,
-        flag_name="Entertainment",
-        account_id=uid("acc-1"),
-        account_name="Checking",
-        payee_id=uid("payee-1"),
-        payee_name="Netflix",
-        category_id=uid("cat-1"),
-        category_name="Entertainment",
-        transfer_account_id=None,
-        deleted=False,
-        subtransactions=[],
-    )
-
-    st2 = ynab.ScheduledTransactionDetail(
-        id=uid("st-2"),
-        date_first=date(2024, 1, 15),
-        date_next=date(2024, 1, 29),
-        frequency="weekly",
-        amount=-5_000,  # -$5.00 outflow
-        memo="Weekly coffee",
-        flag_color=None,
-        flag_name=None,
-        account_id=uid("acc-1"),
-        account_name="Checking",
-        payee_id=uid("payee-2"),
-        payee_name="Coffee Shop",
-        category_id=uid("cat-2"),
-        category_name="Dining Out",
-        transfer_account_id=None,
-        deleted=False,
-        subtransactions=[],
-    )
-
-    # Add a deleted scheduled transaction that should be filtered out
-    st_deleted = ynab.ScheduledTransactionDetail(
-        id=uid("st-deleted"),
-        date_first=date(2024, 1, 1),
-        date_next=date(2024, 3, 1),
-        frequency="monthly",
-        amount=-50_000,
-        memo="Deleted subscription",
-        flag_color=None,
-        flag_name=None,
-        account_id=uid("acc-1"),
-        account_name="Checking",
-        payee_id=uid("payee-3"),
-        payee_name="Old Service",
-        category_id=uid("cat-1"),
-        category_name="Entertainment",
-        transfer_account_id=None,
-        deleted=True,  # Should be excluded
-        subtransactions=[],
-    )
-
-    # Mock repository to return scheduled transactions
-    mock_repository.get_scheduled_transactions.return_value = [
-        st2,
-        st1,
-        st_deleted,
-    ]
-
     result = await mcp_client.call_tool("list_scheduled_transactions", {})
 
-    response_data = extract_response_data(result)
-
-    # Should have 2 scheduled transactions (deleted one excluded)
-    assert len(response_data["scheduled_transactions"]) == 2
-
-    # Should be sorted by next date ascending (earliest scheduled first)
-    assert response_data["scheduled_transactions"][0]["id"] == str(uid("st-2"))
-    assert response_data["scheduled_transactions"][0]["date_next"] == "2024-01-29"
-    assert response_data["scheduled_transactions"][0]["frequency"] == "weekly"
-    assert response_data["scheduled_transactions"][0]["amount"] == "-5"
-    assert response_data["scheduled_transactions"][0]["payee_name"] == "Coffee Shop"
-
-    assert response_data["scheduled_transactions"][1]["id"] == str(uid("st-1"))
-    assert response_data["scheduled_transactions"][1]["date_next"] == "2024-02-01"
-    assert response_data["scheduled_transactions"][1]["frequency"] == "monthly"
-    assert response_data["scheduled_transactions"][1]["amount"] == "-120"
-    assert response_data["scheduled_transactions"][1]["flag"] == "Entertainment (Red)"
-
-    # Check pagination
-    assert response_data["pagination"]["total_count"] == 2
-    assert response_data["pagination"]["has_more"] is False
+    response = extract_response_data(result)
+    ids = [st["id"] for st in response["scheduled_transactions"]]
+    assert ids == [str(uid("st-rent")), str(uid("st-coffee")), str(uid("st-paycheck"))]
+    assert_pagination_info(response["pagination"], total_count=3, limit=25)
 
 
-async def test_list_scheduled_transactions_with_frequency_filter(
-    mock_repository: MagicMock,
+@pytest.mark.parametrize(
+    ("filters", "expected"),
+    [
+        ({"account_id": str(uid("acc-checking"))}, ["st-rent", "st-paycheck"]),
+        ({"category_id": str(uid("cat-dining"))}, ["st-coffee"]),
+        ({"payee_id": str(uid("payee-employer"))}, ["st-paycheck"]),
+        ({"frequency": "weekly"}, ["st-coffee"]),
+        ({"upcoming_days": 7}, ["st-rent"]),
+        ({"upcoming_days": 10}, ["st-rent", "st-coffee"]),
+        ({"min_amount": "0"}, ["st-paycheck"]),
+        ({"max_amount": "-10"}, ["st-rent"]),
+        ({"min_amount": "-100", "max_amount": "0"}, ["st-coffee"]),
+        ({"min_amount": "-5", "max_amount": "-5"}, ["st-coffee"]),
+        ({"account_id": str(uid("acc-checking")), "max_amount": "0"}, ["st-rent"]),
+        ({"account_id": str(uid("acc-checking")), "upcoming_days": 7}, ["st-rent"]),
+        ({"frequency": "weekly", "payee_id": str(uid("payee-landlord"))}, []),
+    ],
+)
+async def test_list_scheduled_transactions_filters(
+    bills: None,
+    mcp_client: Client[FastMCPTransport],
+    filters: dict[str, Any],
+    expected: list[str],
+) -> None:
+    result = await mcp_client.call_tool("list_scheduled_transactions", filters)
+
+    listed = extract_response_data(result)["scheduled_transactions"]
+    assert [st["id"] for st in listed] == [str(uid(name)) for name in expected]
+
+
+async def test_list_scheduled_transactions_pages(
+    scheduled_transactions_api: MagicMock,
     mcp_client: Client[FastMCPTransport],
 ) -> None:
-    """Test scheduled transaction listing filtered by frequency."""
-
-    st_monthly = ynab.ScheduledTransactionDetail(
-        id=uid("st-monthly"),
-        date_first=date(2024, 1, 1),
-        date_next=date(2024, 2, 1),
-        frequency="monthly",
-        amount=-100_000,
-        memo="Monthly bill",
-        flag_color=None,
-        flag_name=None,
-        account_id=uid("acc-1"),
-        account_name="Checking",
-        payee_id=uid("payee-1"),
-        payee_name="Electric Company",
-        category_id=uid("cat-1"),
-        category_name="Utilities",
-        transfer_account_id=None,
-        deleted=False,
-        subtransactions=[],
+    scheduled_transactions_api.get_scheduled_transactions.return_value = scheduled_list(
+        *(
+            scheduled_transaction(id=uid(f"st-{day}"), date_next=date(2024, 3, day))
+            for day in range(1, 6)
+        )
     )
 
-    st_weekly = ynab.ScheduledTransactionDetail(
-        id=uid("st-weekly"),
-        date_first=date(2024, 1, 8),
-        date_next=date(2024, 1, 15),
-        frequency="weekly",
-        amount=-2_500,
-        memo="Weekly groceries",
-        flag_color=None,
-        flag_name=None,
-        account_id=uid("acc-1"),
-        account_name="Checking",
-        payee_id=uid("payee-2"),
-        payee_name="Grocery Store",
-        category_id=uid("cat-2"),
-        category_name="Groceries",
-        transfer_account_id=None,
-        deleted=False,
-        subtransactions=[],
-    )
-
-    # Mock repository to return scheduled transactions
-    mock_repository.get_scheduled_transactions.return_value = [st_monthly, st_weekly]
-
-    # Test filtering by monthly frequency
     result = await mcp_client.call_tool(
-        "list_scheduled_transactions", {"frequency": "monthly"}
+        "list_scheduled_transactions", {"limit": 2, "offset": 2}
     )
 
-    response_data = extract_response_data(result)
+    response = extract_response_data(result)
+    ids = [st["id"] for st in response["scheduled_transactions"]]
+    assert ids == [str(uid("st-3")), str(uid("st-4"))]
+    assert_pagination_info(
+        response["pagination"], total_count=5, limit=2, offset=2, has_more=True
+    )
 
-    # Should only have the monthly scheduled transaction
-    assert len(response_data["scheduled_transactions"]) == 1
-    assert response_data["scheduled_transactions"][0]["id"] == str(uid("st-monthly"))
-    assert response_data["scheduled_transactions"][0]["frequency"] == "monthly"
+
+async def test_get_scheduled_transaction(
+    scheduled_transactions_api: MagicMock,
+    mcp_client: Client[FastMCPTransport],
+) -> None:
+    scheduled_transactions_api.get_scheduled_transaction_by_id.return_value = (
+        scheduled_response(
+            scheduled_transaction(
+                flag_color=ynab.TransactionFlagColor.RED, flag_name="Bills"
+            )
+        )
+    )
+
+    result = await mcp_client.call_tool(
+        "get_scheduled_transaction", {"scheduled_transaction_id": str(uid("st-rent"))}
+    )
+
+    assert extract_response_data(result) == {
+        "id": str(uid("st-rent")),
+        "date_first": "2024-01-01",
+        "date_next": "2024-02-01",
+        "frequency": "monthly",
+        "amount": "-1500",
+        "memo": "Rent",
+        "flag": "Bills (Red)",
+        "account_id": str(uid("acc-checking")),
+        "account_name": "Checking",
+        "payee_id": str(uid("payee-landlord")),
+        "payee_name": "Landlord",
+        "category_id": str(uid("cat-rent")),
+        "category_name": "Rent",
+        "transfer_account_id": None,
+        "subtransactions": None,
+    }
+    scheduled_transactions_api.get_scheduled_transaction_by_id.assert_called_once_with(
+        "test_plan_id", str(uid("st-rent"))
+    )
+
+
+async def test_get_scheduled_transaction_shows_live_parts_of_a_split(
+    scheduled_transactions_api: MagicMock,
+    mcp_client: Client[FastMCPTransport],
+) -> None:
+    scheduled_transactions_api.get_scheduled_transaction_by_id.return_value = (
+        scheduled_response(
+            scheduled_transaction(
+                category_id=None,
+                subtransactions=[
+                    scheduled_part("water", -40_000),
+                    scheduled_part("trash", -25_000, deleted=True),
+                    scheduled_part("sewer", -35_500),
+                ],
+            )
+        )
+    )
+
+    result = await mcp_client.call_tool(
+        "get_scheduled_transaction", {"scheduled_transaction_id": str(uid("st-rent"))}
+    )
+
+    parts = extract_response_data(result)["subtransactions"]
+    assert [part["id"] for part in parts] == [str(uid("water")), str(uid("sewer"))]
+    assert parts[1] == {
+        "id": str(uid("sewer")),
+        "amount": "-35.5",
+        "memo": "sewer",
+        "payee_id": None,
+        "payee_name": None,
+        "category_id": str(uid("cat-sewer")),
+        "category_name": "Sewer",
+    }
+
+
+async def test_get_scheduled_transaction_shows_the_other_account_of_a_transfer(
+    scheduled_transactions_api: MagicMock,
+    mcp_client: Client[FastMCPTransport],
+) -> None:
+    scheduled_transactions_api.get_scheduled_transaction_by_id.return_value = (
+        scheduled_response(
+            scheduled_transaction(transfer_account_id=uid("acc-savings"))
+        )
+    )
+
+    result = await mcp_client.call_tool(
+        "get_scheduled_transaction", {"scheduled_transaction_id": str(uid("st-rent"))}
+    )
+
+    assert extract_response_data(result)["transfer_account_id"] == str(
+        uid("acc-savings")
+    )
+
+
+@pytest.fixture
+def savings(mock_repository: MagicMock) -> None:
+    """A savings account, so that a schedule can transfer money into it."""
+    mock_repository.get_accounts.return_value = [
+        create_ynab_account(id=uid("acc-checking"), name="Checking"),
+        create_ynab_account(
+            id=uid("acc-savings"),
+            name="Savings",
+            transfer_payee_id=uid("payee-to-savings"),
+        ),
+    ]
+
+
+async def test_create_scheduled_transaction(
+    scheduled_transactions_api: MagicMock,
+    mcp_client: Client[FastMCPTransport],
+) -> None:
+    scheduled_transactions_api.create_scheduled_transaction.return_value = (
+        scheduled_response(scheduled_transaction(date_next=date(2024, 3, 1)))
+    )
+
+    result = await mcp_client.call_tool(
+        "create_scheduled_transaction",
+        {
+            "account_id": str(uid("acc-checking")),
+            "date": "2024-03-01",
+            "amount": "-1500.00",
+            "frequency": "monthly",
+            "payee_name": "Landlord",
+            "category_id": str(uid("cat-rent")),
+            "memo": "Rent",
+            "flag_color": "red",
+        },
+    )
+
+    assert extract_response_data(result)["id"] == str(uid("st-rent"))
+    plan_id, wrapper = (
+        scheduled_transactions_api.create_scheduled_transaction.call_args.args
+    )
+    assert plan_id == "test_plan_id"
     assert (
-        response_data["scheduled_transactions"][0]["payee_name"] == "Electric Company"
+        wrapper.scheduled_transaction
+        == ynab.SaveScheduledTransaction.model_validate(
+            {
+                "account_id": uid("acc-checking"),
+                "date": date(2024, 3, 1),
+                "amount": -1_500_000,
+                "frequency": "monthly",
+                "payee_name": "Landlord",
+                "category_id": uid("cat-rent"),
+                "memo": "Rent",
+                "flag_color": "red",
+            }
+        )
     )
 
-    # Check pagination
-    assert response_data["pagination"]["total_count"] == 1
-    assert response_data["pagination"]["has_more"] is False
 
-
-async def test_list_scheduled_transactions_with_upcoming_days_filter(
-    mock_repository: MagicMock,
+async def test_create_scheduled_transfer_pays_the_other_accounts_transfer_payee(
+    savings: None,
+    scheduled_transactions_api: MagicMock,
     mcp_client: Client[FastMCPTransport],
 ) -> None:
-    """Test scheduled transaction listing filtered by upcoming days."""
-
-    # Scheduled for 5 days from now
-    st_soon = ynab.ScheduledTransactionDetail(
-        id=uid("st-soon"),
-        date_first=date(2024, 1, 1),
-        date_next=date(2024, 1, 20),  # 5 days from "today" (2024-01-15)
-        frequency="monthly",
-        amount=-50_000,
-        memo="Due soon",
-        flag_color=None,
-        flag_name=None,
-        account_id=uid("acc-1"),
-        account_name="Checking",
-        payee_id=uid("payee-1"),
-        payee_name="Due Soon Co",
-        category_id=uid("cat-1"),
-        category_name="Bills",
-        transfer_account_id=None,
-        deleted=False,
-        subtransactions=[],
+    scheduled_transactions_api.create_scheduled_transaction.return_value = (
+        scheduled_response(
+            scheduled_transaction(transfer_account_id=uid("acc-savings"))
+        )
     )
 
-    # Scheduled for 15 days from now
-    st_later = ynab.ScheduledTransactionDetail(
-        id=uid("st-later"),
-        date_first=date(2024, 1, 1),
-        date_next=date(2024, 1, 30),  # 15 days from "today" (2024-01-15)
-        frequency="monthly",
-        amount=-75_000,
-        memo="Due later",
-        flag_color=None,
-        flag_name=None,
-        account_id=uid("acc-1"),
-        account_name="Checking",
-        payee_id=uid("payee-2"),
-        payee_name="Due Later Co",
-        category_id=uid("cat-1"),
-        category_name="Bills",
-        transfer_account_id=None,
-        deleted=False,
-        subtransactions=[],
+    await mcp_client.call_tool(
+        "create_scheduled_transaction",
+        {
+            "account_id": str(uid("acc-checking")),
+            "date": "2024-03-01",
+            "amount": "-200",
+            "frequency": "monthly",
+            "transfer_account_id": str(uid("acc-savings")),
+        },
     )
 
-    # Mock repository to return scheduled transactions
-    mock_repository.get_scheduled_transactions.return_value = [st_soon, st_later]
+    wrapper = scheduled_transactions_api.create_scheduled_transaction.call_args.args[1]
+    assert wrapper.scheduled_transaction.payee_id == uid("payee-to-savings")
 
-    # Mock datetime.now() to return a fixed date for testing
-    from unittest.mock import patch
 
-    import server
+@pytest.fixture
+def rent(scheduled_transactions_api: MagicMock) -> None:
+    """The flagged rent schedule in YNAB, and what YNAB returns when it changes."""
+    rent = scheduled_transaction(flag_color=ynab.TransactionFlagColor.RED)
+    api = scheduled_transactions_api
+    api.get_scheduled_transaction_by_id.return_value = scheduled_response(rent)
+    api.update_scheduled_transaction.return_value = scheduled_response(rent)
 
-    with patch.object(server, "datetime") as mock_datetime:
-        mock_datetime.now.return_value.date.return_value = date(2024, 1, 15)
 
-        # Test filtering by upcoming 7 days
-        result = await mcp_client.call_tool(
-            "list_scheduled_transactions", {"upcoming_days": 7}
+def saved_rent(**changes: object) -> ynab.SaveScheduledTransaction:
+    """The rent schedule as an update sends it, with some fields changed."""
+    fields: dict[str, object] = {
+        "account_id": uid("acc-checking"),
+        "date": date(2024, 2, 1),
+        "amount": -1_500_000,
+        "frequency": "monthly",
+        "payee_id": uid("payee-landlord"),
+        "category_id": uid("cat-rent"),
+        "memo": "Rent",
+        "flag_color": "red",
+    }
+    return ynab.SaveScheduledTransaction.model_validate(fields | changes)
+
+
+@pytest.mark.parametrize(
+    ("arguments", "changes"),
+    [
+        ({}, {}),
+        ({"account_id": str(uid("acc-savings"))}, {"account_id": uid("acc-savings")}),
+        ({"date": "2024-02-05"}, {"date": date(2024, 2, 5)}),
+        ({"amount": "-1600.50"}, {"amount": -1_600_500}),
+        ({"amount": "0"}, {"amount": 0}),
+        ({"frequency": "yearly"}, {"frequency": "yearly"}),
+        ({"category_id": str(uid("cat-home"))}, {"category_id": uid("cat-home")}),
+        ({"memo": "Rent and parking"}, {"memo": "Rent and parking"}),
+        ({"memo": ""}, {"memo": ""}),
+        ({"flag_color": "blue"}, {"flag_color": "blue"}),
+        ({"payee_id": str(uid("payee-new"))}, {"payee_id": uid("payee-new")}),
+        (
+            {"payee_name": "New Landlord"},
+            {"payee_id": None, "payee_name": "New Landlord"},
+        ),
+        (
+            {"transfer_account_id": str(uid("acc-savings"))},
+            {"payee_id": uid("payee-to-savings")},
+        ),
+    ],
+)
+async def test_update_scheduled_transaction_changes_only_the_fields_given(
+    rent: None,
+    savings: None,
+    scheduled_transactions_api: MagicMock,
+    mcp_client: Client[FastMCPTransport],
+    arguments: dict[str, Any],
+    changes: dict[str, object],
+) -> None:
+    result = await mcp_client.call_tool(
+        "update_scheduled_transaction",
+        {"scheduled_transaction_id": str(uid("st-rent")), **arguments},
+    )
+
+    assert extract_response_data(result)["id"] == str(uid("st-rent"))
+    plan_id, scheduled_id, wrapper = (
+        scheduled_transactions_api.update_scheduled_transaction.call_args.args
+    )
+    assert (plan_id, scheduled_id) == ("test_plan_id", str(uid("st-rent")))
+    assert wrapper.scheduled_transaction == saved_rent(**changes)
+
+
+async def test_update_scheduled_transaction_refuses_a_split(
+    scheduled_transactions_api: MagicMock,
+    mcp_client: Client[FastMCPTransport],
+) -> None:
+    scheduled_transactions_api.get_scheduled_transaction_by_id.return_value = (
+        scheduled_response(
+            scheduled_transaction(subtransactions=[scheduled_part("water", -40_000)])
+        )
+    )
+
+    with pytest.raises(ToolError, match="split"):
+        await mcp_client.call_tool(
+            "update_scheduled_transaction",
+            {"scheduled_transaction_id": str(uid("st-rent")), "amount": "-50"},
         )
 
-        response_data = extract_response_data(result)
-
-        # Should only have the transaction due within 7 days
-        assert len(response_data["scheduled_transactions"]) == 1
-        assert response_data["scheduled_transactions"][0]["id"] == str(uid("st-soon"))
-        assert response_data["scheduled_transactions"][0]["payee_name"] == "Due Soon Co"
+    scheduled_transactions_api.update_scheduled_transaction.assert_not_called()
 
 
-async def test_list_scheduled_transactions_with_amount_filter(
-    mock_repository: MagicMock,
+async def test_update_scheduled_transaction_ignores_deleted_parts(
+    scheduled_transactions_api: MagicMock,
     mcp_client: Client[FastMCPTransport],
 ) -> None:
-    """Test scheduled transaction listing filtered by amount range."""
+    rent = scheduled_transaction(
+        subtransactions=[scheduled_part("water", -40_000, deleted=True)]
+    )
+    api = scheduled_transactions_api
+    api.get_scheduled_transaction_by_id.return_value = scheduled_response(rent)
+    api.update_scheduled_transaction.return_value = scheduled_response(rent)
 
-    st_small = ynab.ScheduledTransactionDetail(
-        id=uid("st-small"),
-        date_first=date(2024, 1, 1),
-        date_next=date(2024, 2, 1),
-        frequency="monthly",
-        amount=-1_000,  # -$1.00
-        memo="Small expense",
-        flag_color=None,
-        flag_name=None,
-        account_id=uid("acc-1"),
-        account_name="Checking",
-        payee_id=uid("payee-1"),
-        payee_name="Small Store",
-        category_id=uid("cat-1"),
-        category_name="Misc",
-        transfer_account_id=None,
-        deleted=False,
-        subtransactions=[],
+    await mcp_client.call_tool(
+        "update_scheduled_transaction",
+        {"scheduled_transaction_id": str(uid("st-rent")), "amount": "-50"},
     )
 
-    st_large = ynab.ScheduledTransactionDetail(
-        id=uid("st-large"),
-        date_first=date(2024, 1, 1),
-        date_next=date(2024, 2, 1),
-        frequency="monthly",
-        amount=-500_000,  # -$500.00
-        memo="Large expense",
-        flag_color=None,
-        flag_name=None,
-        account_id=uid("acc-1"),
-        account_name="Checking",
-        payee_id=uid("payee-2"),
-        payee_name="Large Store",
-        category_id=uid("cat-1"),
-        category_name="Bills",
-        transfer_account_id=None,
-        deleted=False,
-        subtransactions=[],
+    wrapper = api.update_scheduled_transaction.call_args.args[2]
+    assert wrapper.scheduled_transaction.amount == -50_000
+
+
+async def test_delete_scheduled_transaction(
+    scheduled_transactions_api: MagicMock,
+    mcp_client: Client[FastMCPTransport],
+) -> None:
+    scheduled_transactions_api.delete_scheduled_transaction.return_value = (
+        scheduled_response(scheduled_transaction(deleted=True))
     )
 
-    # Mock repository to return scheduled transactions
-    mock_repository.get_scheduled_transactions.return_value = [st_small, st_large]
-
-    # Test filtering by minimum amount (expenses <= -$10, i.e., larger expenses)
     result = await mcp_client.call_tool(
-        "list_scheduled_transactions", {"max_amount": -10}
+        "delete_scheduled_transaction",
+        {"scheduled_transaction_id": str(uid("st-rent"))},
     )
 
-    response_data = extract_response_data(result)
-
-    # Should only have the large transaction (<= -$10)
-    assert len(response_data["scheduled_transactions"]) == 1
-    assert response_data["scheduled_transactions"][0]["id"] == str(uid("st-large"))
-    assert response_data["scheduled_transactions"][0]["amount"] == "-500"
-
-
-async def test_list_scheduled_transactions_with_account_filter(
-    mock_repository: MagicMock,
-    mcp_client: Client[FastMCPTransport],
-) -> None:
-    """Test scheduled transaction listing filtered by account."""
-
-    st_checking = ynab.ScheduledTransactionDetail(
-        id=uid("st-checking"),
-        date_first=date(2024, 1, 1),
-        date_next=date(2024, 2, 1),
-        frequency="monthly",
-        amount=-100_000,
-        memo="Checking account expense",
-        flag_color=None,
-        flag_name=None,
-        account_id=uid("acc-checking"),
-        account_name="Checking",
-        payee_id=uid("payee-1"),
-        payee_name="Merchant A",
-        category_id=uid("cat-1"),
-        category_name="Bills",
-        transfer_account_id=None,
-        deleted=False,
-        subtransactions=[],
+    assert extract_response_data(result)["id"] == str(uid("st-rent"))
+    scheduled_transactions_api.delete_scheduled_transaction.assert_called_once_with(
+        "test_plan_id", str(uid("st-rent"))
     )
-
-    st_savings = ynab.ScheduledTransactionDetail(
-        id=uid("st-savings"),
-        date_first=date(2024, 1, 1),
-        date_next=date(2024, 2, 1),
-        frequency="monthly",
-        amount=-50_000,
-        memo="Savings account expense",
-        flag_color=None,
-        flag_name=None,
-        account_id=uid("acc-savings"),
-        account_name="Savings",
-        payee_id=uid("payee-2"),
-        payee_name="Merchant B",
-        category_id=uid("cat-1"),
-        category_name="Bills",
-        transfer_account_id=None,
-        deleted=False,
-        subtransactions=[],
-    )
-
-    # Mock repository to return scheduled transactions
-    mock_repository.get_scheduled_transactions.return_value = [st_checking, st_savings]
-
-    # Test filtering by checking account
-    result = await mcp_client.call_tool(
-        "list_scheduled_transactions", {"account_id": str(uid("acc-checking"))}
-    )
-
-    response_data = extract_response_data(result)
-
-    # Should only have the checking account scheduled transaction
-    assert len(response_data["scheduled_transactions"]) == 1
-    assert response_data["scheduled_transactions"][0]["id"] == str(uid("st-checking"))
-    assert response_data["scheduled_transactions"][0]["account_name"] == "Checking"
-
-
-async def test_list_scheduled_transactions_with_category_filter(
-    mock_repository: MagicMock,
-    mcp_client: Client[FastMCPTransport],
-) -> None:
-    """Test scheduled transaction listing filtered by category."""
-
-    st_bills = ynab.ScheduledTransactionDetail(
-        id=uid("st-bills"),
-        date_first=date(2024, 1, 1),
-        date_next=date(2024, 2, 1),
-        frequency="monthly",
-        amount=-100_000,
-        memo="Monthly bill",
-        flag_color=None,
-        flag_name=None,
-        account_id=uid("acc-1"),
-        account_name="Checking",
-        payee_id=uid("payee-1"),
-        payee_name="Utility Co",
-        category_id=uid("cat-bills"),
-        category_name="Bills",
-        transfer_account_id=None,
-        deleted=False,
-        subtransactions=[],
-    )
-
-    st_entertainment = ynab.ScheduledTransactionDetail(
-        id=uid("st-entertainment"),
-        date_first=date(2024, 1, 1),
-        date_next=date(2024, 2, 1),
-        frequency="monthly",
-        amount=-1_500,
-        memo="Entertainment subscription",
-        flag_color=None,
-        flag_name=None,
-        account_id=uid("acc-1"),
-        account_name="Checking",
-        payee_id=uid("payee-2"),
-        payee_name="Streaming Service",
-        category_id=uid("cat-entertainment"),
-        category_name="Entertainment",
-        transfer_account_id=None,
-        deleted=False,
-        subtransactions=[],
-    )
-
-    # Mock repository to return scheduled transactions
-    mock_repository.get_scheduled_transactions.return_value = [
-        st_bills,
-        st_entertainment,
-    ]
-
-    # Test filtering by bills category
-    result = await mcp_client.call_tool(
-        "list_scheduled_transactions", {"category_id": str(uid("cat-bills"))}
-    )
-
-    response_data = extract_response_data(result)
-
-    # Should only have the bills category scheduled transaction
-    assert len(response_data["scheduled_transactions"]) == 1
-    assert response_data["scheduled_transactions"][0]["id"] == str(uid("st-bills"))
-    assert response_data["scheduled_transactions"][0]["category_name"] == "Bills"
-
-
-async def test_list_scheduled_transactions_with_min_amount_filter(
-    mock_repository: MagicMock,
-    mcp_client: Client[FastMCPTransport],
-) -> None:
-    """Test scheduled transaction listing filtered by minimum amount."""
-
-    st_small = ynab.ScheduledTransactionDetail(
-        id=uid("st-small"),
-        date_first=date(2024, 1, 1),
-        date_next=date(2024, 2, 1),
-        frequency="monthly",
-        amount=-1_000,  # -$1.00
-        memo="Small expense",
-        flag_color=None,
-        flag_name=None,
-        account_id=uid("acc-1"),
-        account_name="Checking",
-        payee_id=uid("payee-1"),
-        payee_name="Small Store",
-        category_id=uid("cat-1"),
-        category_name="Misc",
-        transfer_account_id=None,
-        deleted=False,
-        subtransactions=[],
-    )
-
-    st_large = ynab.ScheduledTransactionDetail(
-        id=uid("st-large"),
-        date_first=date(2024, 1, 1),
-        date_next=date(2024, 2, 1),
-        frequency="monthly",
-        amount=-500_000,  # -$500.00
-        memo="Large expense",
-        flag_color=None,
-        flag_name=None,
-        account_id=uid("acc-1"),
-        account_name="Checking",
-        payee_id=uid("payee-2"),
-        payee_name="Large Store",
-        category_id=uid("cat-1"),
-        category_name="Bills",
-        transfer_account_id=None,
-        deleted=False,
-        subtransactions=[],
-    )
-
-    # Mock repository to return scheduled transactions
-    mock_repository.get_scheduled_transactions.return_value = [st_small, st_large]
-
-    # Test filtering by minimum amount (only expenses >= -$5, excludes -$500)
-    result = await mcp_client.call_tool(
-        "list_scheduled_transactions", {"min_amount": -5}
-    )
-
-    response_data = extract_response_data(result)
-
-    # Should only have the small transaction (>= -$5)
-    assert len(response_data["scheduled_transactions"]) == 1
-    assert response_data["scheduled_transactions"][0]["id"] == str(uid("st-small"))
-    assert response_data["scheduled_transactions"][0]["amount"] == "-1"
-
-
-async def test_list_scheduled_transactions_with_payee_filter(
-    mock_repository: MagicMock,
-    mcp_client: Client[FastMCPTransport],
-) -> None:
-    """Test scheduled transaction listing filtered by payee."""
-
-    st_netflix = ynab.ScheduledTransactionDetail(
-        id=uid("st-netflix"),
-        date_first=date(2024, 1, 1),
-        date_next=date(2024, 2, 1),
-        frequency="monthly",
-        amount=-1_500,
-        memo="Netflix subscription",
-        flag_color=None,
-        flag_name=None,
-        account_id=uid("acc-1"),
-        account_name="Checking",
-        payee_id=uid("payee-netflix"),
-        payee_name="Netflix",
-        category_id=uid("cat-1"),
-        category_name="Entertainment",
-        transfer_account_id=None,
-        deleted=False,
-        subtransactions=[],
-    )
-
-    st_spotify = ynab.ScheduledTransactionDetail(
-        id=uid("st-spotify"),
-        date_first=date(2024, 1, 1),
-        date_next=date(2024, 2, 1),
-        frequency="monthly",
-        amount=-1_000,
-        memo="Spotify subscription",
-        flag_color=None,
-        flag_name=None,
-        account_id=uid("acc-1"),
-        account_name="Checking",
-        payee_id=uid("payee-spotify"),
-        payee_name="Spotify",
-        category_id=uid("cat-1"),
-        category_name="Entertainment",
-        transfer_account_id=None,
-        deleted=False,
-        subtransactions=[],
-    )
-
-    # Mock repository to return scheduled transactions
-    mock_repository.get_scheduled_transactions.return_value = [st_netflix, st_spotify]
-
-    # Test filtering by Netflix payee
-    result = await mcp_client.call_tool(
-        "list_scheduled_transactions", {"payee_id": str(uid("payee-netflix"))}
-    )
-
-    response_data = extract_response_data(result)
-
-    # Should only have the Netflix scheduled transaction
-    assert len(response_data["scheduled_transactions"]) == 1
-    assert response_data["scheduled_transactions"][0]["id"] == str(uid("st-netflix"))
-    assert response_data["scheduled_transactions"][0]["payee_name"] == "Netflix"
-
-
-async def test_list_scheduled_transactions_pagination(
-    mock_repository: MagicMock,
-    mcp_client: Client[FastMCPTransport],
-) -> None:
-    """Test scheduled transaction listing with pagination."""
-
-    # Create multiple scheduled transactions
-    scheduled_transactions = []
-    for i in range(15):
-        st = ynab.ScheduledTransactionDetail(
-            id=uid(f"st-{i}"),
-            date_first=date(2024, 1, 1),
-            date_next=date(2024, 2, i + 1),  # Different next dates for sorting
-            frequency="monthly",
-            amount=-10_000 * (i + 1),
-            memo=f"Transaction {i}",
-            flag_color=None,
-            flag_name=None,
-            account_id=uid("acc-1"),
-            account_name="Checking",
-            payee_id=uid(f"payee-{i}"),
-            payee_name=f"Payee {i}",
-            category_id=uid("cat-1"),
-            category_name="Bills",
-            transfer_account_id=None,
-            deleted=False,
-            subtransactions=[],
-        )
-        scheduled_transactions.append(st)
-
-    # Mock repository to return scheduled transactions
-    mock_repository.get_scheduled_transactions.return_value = scheduled_transactions
-
-    # Test first page with limit
-    result = await mcp_client.call_tool(
-        "list_scheduled_transactions", {"limit": 5, "offset": 0}
-    )
-
-    response_data = extract_response_data(result)
-
-    # Should have 5 scheduled transactions
-    assert len(response_data["scheduled_transactions"]) == 5
-    assert response_data["pagination"]["total_count"] == 15
-    assert response_data["pagination"]["has_more"] is True
-
-    # Test second page
-    result = await mcp_client.call_tool(
-        "list_scheduled_transactions", {"limit": 5, "offset": 5}
-    )
-
-    response_data = extract_response_data(result)
-
-    # Should have next 5 scheduled transactions
-    assert len(response_data["scheduled_transactions"]) == 5
-    assert response_data["pagination"]["total_count"] == 15
-    assert response_data["pagination"]["has_more"] is True
-
-
-async def test_list_scheduled_transactions_with_subtransactions(
-    mock_repository: MagicMock,
-    mcp_client: Client[FastMCPTransport],
-) -> None:
-    """Test scheduled transaction listing with split transactions (subtransactions)."""
-
-    # Create scheduled subtransactions
-    sub1 = ynab.ScheduledSubTransaction(
-        id=uid("sub-1"),
-        scheduled_transaction_id=uid("st-split"),
-        amount=-30_000,  # -$30.00 for groceries
-        memo="Groceries portion",
-        payee_id=uid("payee-1"),
-        payee_name="Grocery Store",
-        category_id=uid("cat-groceries"),
-        category_name="Groceries",
-        transfer_account_id=None,
-        deleted=False,
-    )
-
-    sub2 = ynab.ScheduledSubTransaction(
-        id=uid("sub-2"),
-        scheduled_transaction_id=uid("st-split"),
-        amount=-20_000,  # -$20.00 for household
-        memo="Household portion",
-        payee_id=uid("payee-1"),
-        payee_name="Grocery Store",
-        category_id=uid("cat-household"),
-        category_name="Household",
-        transfer_account_id=None,
-        deleted=False,
-    )
-
-    st_split = ynab.ScheduledTransactionDetail(
-        id=uid("st-split"),
-        date_first=date(2024, 1, 1),
-        date_next=date(2024, 2, 1),
-        frequency="monthly",
-        amount=-50_000,  # -$50.00 total (should equal sum of subtransactions)
-        memo="Split transaction",
-        flag_color=None,
-        flag_name=None,
-        account_id=uid("acc-1"),
-        account_name="Checking",
-        payee_id=uid("payee-1"),
-        payee_name="Grocery Store",
-        category_id=None,  # Split transactions don't have a main category
-        category_name=None,
-        transfer_account_id=None,
-        deleted=False,
-        subtransactions=[sub1, sub2],
-    )
-
-    # Mock repository to return scheduled transactions
-    mock_repository.get_scheduled_transactions.return_value = [st_split]
-
-    result = await mcp_client.call_tool("list_scheduled_transactions", {})
-
-    response_data = extract_response_data(result)
-
-    # Should have 1 scheduled transaction with subtransactions
-    assert len(response_data["scheduled_transactions"]) == 1
-    st = response_data["scheduled_transactions"][0]
-
-    assert st["id"] == str(uid("st-split"))
-    assert st["amount"] == "-50"
-    assert st["memo"] == "Split transaction"
-
-    # Check subtransactions
-    assert len(st["subtransactions"]) == 2
-
-    assert st["subtransactions"][0]["id"] == str(uid("sub-1"))
-    assert st["subtransactions"][0]["amount"] == "-30"
-    assert st["subtransactions"][0]["category_name"] == "Groceries"
-
-    assert st["subtransactions"][1]["id"] == str(uid("sub-2"))
-    assert st["subtransactions"][1]["amount"] == "-20"
-    assert st["subtransactions"][1]["category_name"] == "Household"
-
-
-async def test_list_scheduled_transactions_with_deleted_subtransactions(
-    mock_repository: MagicMock,
-    mcp_client: Client[FastMCPTransport],
-) -> None:
-    """Test scheduled transaction listing excludes deleted subtransactions."""
-
-    # Create active and deleted scheduled subtransactions
-    sub_active = ynab.ScheduledSubTransaction(
-        id=uid("sub-active"),
-        scheduled_transaction_id=uid("st-mixed"),
-        amount=-30_000,  # -$30.00
-        memo="Active subtransaction",
-        payee_id=uid("payee-1"),
-        payee_name="Store",
-        category_id=uid("cat-1"),
-        category_name="Active Category",
-        transfer_account_id=None,
-        deleted=False,
-    )
-
-    sub_deleted = ynab.ScheduledSubTransaction(
-        id=uid("sub-deleted"),
-        scheduled_transaction_id=uid("st-mixed"),
-        amount=-20_000,  # -$20.00
-        memo="Deleted subtransaction",
-        payee_id=uid("payee-1"),
-        payee_name="Store",
-        category_id=uid("cat-2"),
-        category_name="Deleted Category",
-        transfer_account_id=None,
-        deleted=True,  # Should be excluded
-    )
-
-    st_mixed = ynab.ScheduledTransactionDetail(
-        id=uid("st-mixed"),
-        date_first=date(2024, 1, 1),
-        date_next=date(2024, 2, 1),
-        frequency="monthly",
-        amount=-50_000,  # -$50.00 total
-        memo="Mixed subtransactions",
-        flag_color=None,
-        flag_name=None,
-        account_id=uid("acc-1"),
-        account_name="Checking",
-        payee_id=uid("payee-1"),
-        payee_name="Store",
-        category_id=None,
-        category_name=None,
-        transfer_account_id=None,
-        deleted=False,
-        subtransactions=[sub_active, sub_deleted],
-    )
-
-    # Mock repository to return scheduled transactions
-    mock_repository.get_scheduled_transactions.return_value = [st_mixed]
-
-    result = await mcp_client.call_tool("list_scheduled_transactions", {})
-
-    response_data = extract_response_data(result)
-
-    # Should have 1 scheduled transaction with only active subtransactions
-    assert len(response_data["scheduled_transactions"]) == 1
-    st = response_data["scheduled_transactions"][0]
-
-    assert st["id"] == str(uid("st-mixed"))
-    assert st["amount"] == "-50"
-
-    # Should only have the active subtransaction (deleted one excluded)
-    assert len(st["subtransactions"]) == 1
-    assert st["subtransactions"][0]["id"] == str(uid("sub-active"))
-    assert st["subtransactions"][0]["category_name"] == "Active Category"

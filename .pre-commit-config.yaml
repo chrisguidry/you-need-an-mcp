@@ -27,4 +27,4 @@ repos:
           - pydantic
           - "ynab>=4.4.1,<5"
         args: [--strict, --show-error-codes]
-        files: ^(server\.py|models\.py|tests/.+\.py)$
+        files: \.py$

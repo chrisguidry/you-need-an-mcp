@@ -35,7 +35,7 @@ Each use case follows this structure for clarity:
 **Why it matters**: Busy parents need quick weekly snapshots without opening YNAB. They want conversational summaries that highlight what needs attention.
 
 **MCP Server Role**:
-- `get_budget_month()` - Provides current month's budgeted amounts, activity, and balances
+- `get_plan_month()` - Provides current month's budgeted amounts, activity, and balances
 - `list_categories()` - Gets category structure for organization
 - Returns clean, structured data with proper currency formatting
 
@@ -46,7 +46,7 @@ Each use case follows this structure for clarity:
 - Generates conversational summary
 
 **Example Implementation Flow**:
-1. Call `get_budget_month()` to get current state
+1. Call `get_plan_month()` to get current state
 2. Identify categories where `balance < 0` (overspent)
 3. Find categories with available funds (`balance > 0`)
 4. Prioritize by spending velocity and days left in month
@@ -101,7 +101,7 @@ Each use case follows this structure for clarity:
 **Why it matters**: Quick budget checks before shopping trips prevent overspending and the stress of moving money after the fact.
 
 **MCP Server Role**:
-- `get_budget_month()` - Current balances for relevant categories
+- `get_plan_month()` - Current balances for relevant categories
 - `list_categories()` - Category relationships and groupings
 - Real-time accurate balance data
 
@@ -117,7 +117,7 @@ Each use case follows this structure for clarity:
 **Why it matters**: In many couples, one person manages the detailed budget while their partner needs simple, reassuring visibility without YNAB complexity. Partners want to understand the big picture and verify specific transactions without learning budgeting software.
 
 **MCP Server Role**:
-- `get_budget_month()` - Overall budget health data
+- `get_plan_month()` - Overall budget health data
 - `list_accounts()` - Account balances for net worth
 - `list_transactions()` - Recent transaction verification
 - `find_payee()` - Quick lookup for specific merchants
@@ -134,7 +134,7 @@ Each use case follows this structure for clarity:
 **Why it matters**: YNAB's zero-based budgeting requires monthly cleanup. Parents need quick identification of surplus funds and smart reallocation suggestions.
 
 **MCP Server Role**:
-- `get_budget_month()` - All category balances for current month
+- `get_plan_month()` - All category balances for current month
 - `list_category_groups()` - Organized view of budget structure
 - Accurate to-the-penny balance data
 
@@ -166,7 +166,7 @@ Each use case follows this structure for clarity:
 **Why it matters**: Families need to model major financial decisions before committing. They want to understand how changes in income, expenses, or family size would impact their budget without actually making changes in YNAB.
 
 **MCP Server Role**:
-- `get_budget_month()` - Current budget as baseline
+- `get_plan_month()` - Current budget as baseline
 - `list_transactions()` - Historical spending patterns
 - `list_categories()` - Understanding fixed vs. variable expenses
 - `list_accounts()` - Current financial position
@@ -222,7 +222,7 @@ Each use case follows this structure for clarity:
 - ✅ Only individual payee renaming supported via `update_payee()`
 
 **Current Implementation Approach**:
-This use case is **advisory only** due to API limitations. The MCP server can identify duplicate patterns and suggest cleanup strategies, but users must manually execute merges in YNAB's web interface. A future `rename_payee()` tool could automate the renaming step after manual merging.
+YNAB's API cannot merge payees, so merging stays manual in YNAB's web interface. The MCP server finds duplicate patterns and suggests a cleanup, and `rename_payee()` carries out the renames.
 
 ## Design Principles for Use Cases
 
@@ -232,57 +232,47 @@ This use case is **advisory only** due to API limitations. The MCP server can id
 4. **Time Sensitive**: Respect that parents are asking between activities
 5. **Trust Building**: Be transparent about calculations and assumptions
 
-## Future Use Case Directions
+## Use Cases That Change the Plan
 
 ### Receipt/Transaction Quick Entry
 **User says**: "Add Costco $127.43 groceries and household"
 
-**Future MCP Tools Needed**:
-- `create_transaction()` - Add new transactions with splits
-- `get_recent_payees()` - Smart payee matching
-- `suggest_categories()` - Based on payee history
+**MCP Server Role**:
+- `find_payee()` and `list_categories()` - Resolve the payee and categories
+- `create_transactions()` - Enter the transaction, as a split when it spans categories
 
-### Bill Reminders
-**User says**: "What bills are due this week?"
+### Weekly Review
+**User says**: "Help me go through this week's transactions"
 
 **MCP Server Role**:
-- `list_scheduled_transactions()` - Future tool for recurring transactions
-- Current workaround: Analyze transaction history for patterns
+- `import_transactions()` - Pull in anything the bank has that YNAB does not yet
+- `list_transactions(status="unapproved")` - What needs review
+- `update_transactions()` - Approve, categorize, and fix payees in one call
 
-### Import Assistance
-**User says**: "Help me categorize these Venmo transactions"
+### Covering Overspending
+**User says**: "Groceries is overspent, cover it from Dining Out"
 
-**Future MCP Tools Needed**:
-- `import_transactions()` - Bulk import capability
-- `update_transaction()` - Modify imported transactions
-- `match_payees()` - Fuzzy matching for payee cleanup
+**MCP Server Role**:
+- `get_plan_month()` - Find overspent categories and where money is available
+- `move_money()` - Move the money, and report both categories before and after
+- `list_money_movements()` - Explain earlier moves
+
+### Bills and Paychecks
+**User says**: "What bills are due this week?" or "The electric bill went up to $140" or "I paid rent early"
+
+**MCP Server Role**:
+- `list_scheduled_transactions(upcoming_days=7)` - What is due
+- `update_scheduled_transaction()` - Change the amount, date, or frequency
+- `enter_scheduled_transaction()` - Enter it now and move the schedule to its next date
 
 ## Tool Implementation Status
 
-### Currently Implemented (11 tools)
-- ✅ `list_budgets()` - All use cases
-- ✅ `list_accounts()` - Emergency fund calculations
-- ✅ `list_categories()` - Budget structure understanding
-- ✅ `list_category_groups()` - Efficient category overview
-- ✅ `get_budget_month()` - Weekly check-ins, category sweep
-- ✅ `get_month_category_by_id()` - Specific category details
-- ✅ `list_transactions()` - Expense tracking, subscriptions, transparency
-- ✅ `list_payees()` - Payee analysis
-- ✅ `find_payee()` - Efficient payee search
-- ✅ `list_scheduled_transactions()` - Bill reminders, recurring expenses
+32 tools, each tagged `read` or `write`.  `YNAB_READ_ONLY` serves only the read tools.
 
-### Recently Implemented
-- ✅ `list_scheduled_transactions()` - Bill reminders, recurring expenses
-  - Supports all major use cases: subscription audits, bill reminders, recurring expense analysis
-  - Comprehensive filtering: account, category, payee, frequency, upcoming days, amount range
-  - Full pagination support following existing patterns
-  - Consistent field naming with regular transactions using shared base model
-  - 100% test coverage with extensive edge case testing
-
-### Planned Tools (SDK-supported)
-- 🔄 `create_transaction()` - Quick entry
-- 🔄 `update_transaction()` - Import assistance
-- 🔄 `import_transactions()` - Bulk import
+### Not Possible Through YNAB's API
+- Attaching receipts to transactions
+- Creating or changing split scheduled transactions
+- Merging or deleting payees
 
 ### Optimization Considerations
 The SDK offers specialized transaction endpoints that could optimize specific use cases:

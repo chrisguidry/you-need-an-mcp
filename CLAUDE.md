@@ -9,12 +9,13 @@ MCP (Model Context Protocol) server for YNAB (You Need A Budget) using FastMCP. 
 ```bash
 # Development
 uv sync --group dev        # Install all dependencies
-pytest --cov=server --cov=models --cov-report=term-missing  # Run tests with coverage
+uv run pytest               # Run tests with coverage (100% required)
 fastmcp run server.py:mcp  # Run MCP server
 
 # Authentication (required)
 export YNAB_ACCESS_TOKEN=your_token_here
-export YNAB_BUDGET=your_budget_id_here  # Required
+export YNAB_PLAN=your_plan_id_here  # Required
+export YNAB_READ_ONLY=1  # Optional: serve only the read tools
 ```
 
 ## Critical Design Principles
@@ -30,7 +31,7 @@ export YNAB_BUDGET=your_budget_id_here  # Required
 
 - **Household finance assistant** - Help heads of household be more effective with YNAB
 - **Insights and notifications** - Surface important financial patterns and alerts
-- **Safe evolution** - Currently read-only, will add careful mutations (transactions, imports)
+- **Safe changes** - Every write tool says what it does through MCP annotations, reports what it changed, and can be switched off with `YNAB_READ_ONLY`
 - **Natural language friendly** - Enable text-based transaction entry and import assistance
 - **User-friendly defaults** - Sensible limits, current month defaults, active data only
 - **Performance conscious** - Pagination prevents token overflow, efficient payee search
@@ -56,9 +57,18 @@ export YNAB_BUDGET=your_budget_id_here  # Required
 
 ## Architecture
 
-- `server.py` - MCP server implementation using `@mcp.tool()` decorators
-- `models.py` - Pydantic models matching YNAB's data structures
+Modules are organized by domain.  Each domain module holds its Pydantic
+models, its tools, and the YNAB calls they make, and exports its tools as
+`TOOLS`.
+
+- `server.py` - The FastMCP server: instructions, middleware, the tools of every domain, and read-only mode
+- `plan.py`, `months.py`, `accounts.py`, `categories.py`, `assignments.py`, `payees.py`, `transactions.py`, `transaction_entry.py`, `scheduled_transactions.py`, `scheduled_entry.py` - The domains
+- `repository.py` - The in-memory mirror of accounts, payees, categories, and transactions, kept current with delta sync.  Tools receive it as `Shared(plan_repository)`; a write calls `mark_stale()` so the next read syncs first
+- `effects.py` - The tags and MCP annotations that say what each tool does to the plan
+- `ynab_errors.py` - Middleware that passes YNAB's error detail to the client
+- `currency.py`, `pagination.py`, `recurrence.py` - Milliunit conversion, paging, and scheduled dates
 - `DESIGN.md` - Detailed use cases and design philosophy
-- Uses context managers for YNAB client lifecycle
-- Returns structured JSON with consistent pagination format
-- Handle YNAB API errors gracefully with user-friendly messages
+
+Every tool declares `title`, `tags` (its domain plus `read` or `write`), and `annotations` from `effects.py`.
+
+Tests mock the repository with the `mock_repository` fixture and the YNAB API classes with fixtures like `transactions_api`, and return real SDK models.
