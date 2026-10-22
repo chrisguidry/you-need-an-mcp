@@ -686,3 +686,7 @@ def update_transaction(
     updated_transaction = _repository.update_transaction(transaction_id, update_data)
 
     return Transaction.from_ynab(updated_transaction, _repository)
+
+
+if __name__ == "__main__":
+    mcp.run()

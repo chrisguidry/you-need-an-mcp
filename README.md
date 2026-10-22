@@ -28,10 +28,10 @@ To use this MCP server, you need a YNAB Personal Access Token:
 export YNAB_ACCESS_TOKEN=your_token_here
 ```
 
-Optionally, set a default budget ID to avoid having to specify it in every call:
+Set the budget ID used by all tools (required):
 
 ```bash
-export YNAB_DEFAULT_BUDGET=your_budget_id_here
+export YNAB_BUDGET=your_budget_id_here
 ```
 
 ### 4. Run the Server
@@ -39,6 +39,48 @@ export YNAB_DEFAULT_BUDGET=your_budget_id_here
 ```bash
 uv run python server.py
 ```
+
+### Windows / Managed Machines
+
+If `uvx` or `you-need-an-mcp.exe` fails with `Access is denied (os error 5)`,
+endpoint security may be blocking the generated console-script executable.
+Launch the server through the environment's `python.exe` instead.
+
+For a source checkout, after installing dependencies with `uv sync --locked`,
+run these PowerShell commands from the repository directory:
+
+```powershell
+$env:YNAB_ACCESS_TOKEN = "<your-token>"
+$env:YNAB_BUDGET = "<your-budget-id>"
+& .\.venv\Scripts\python.exe -m server
+```
+
+For a persistent tool installation of a version with module-launch support
+(`uv tool install git+https://github.com/chrisguidry/you-need-an-mcp.git`),
+locate the interpreter using `uv tool dir` rather than assuming a fixed
+installation path:
+
+```powershell
+$toolDirectory = uv tool dir
+$python = Join-Path $toolDirectory "you-need-an-mcp\Scripts\python.exe"
+& $python -I -m server
+```
+
+To register that installed environment with Claude Code, replace the placeholders
+with your configuration:
+
+```powershell
+claude mcp add ynab --scope user `
+  -e "YNAB_ACCESS_TOKEN=<your-token>" -e "YNAB_BUDGET=<your-budget-id>" `
+  -- $python -I -m server
+```
+
+The module launch runs the same MCP server as the console-script entry point.
+For installed tools, `-I` prevents an unrelated `server.py` in the current
+directory from shadowing the installed module.
+It requires an installed environment and permission to execute its interpreter.
+If endpoint security also prevents installation or interpreter execution, use
+your organization's approved setup process.
 
 ## Available Tools
 
