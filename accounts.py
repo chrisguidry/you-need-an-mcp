@@ -170,9 +170,9 @@ def create_account(
     Args:
         name: Account name (required)
         type: Account type: "checking", "savings", "cash", "creditCard",
-              "otherAsset", or "otherLiability" (required)
+            "otherAsset", or "otherLiability" (required)
         balance: Starting balance in currency units.  Use a negative balance for
-                 money owed on a credit card or liability (required)
+            money owed on a credit card or liability (required)
 
     Returns:
         The new account

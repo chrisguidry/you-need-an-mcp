@@ -120,7 +120,7 @@ def enter_scheduled_transaction(
         scheduled_transaction_id: Scheduled transaction to enter (required)
         date: Date of the transaction, not in the future (default: today)
         amount: Amount in currency units, when it differs from the scheduled
-                amount (optional)
+            amount (optional)
         memo: Memo for the transaction (default: the scheduled memo)
 
     Returns:

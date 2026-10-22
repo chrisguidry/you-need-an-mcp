@@ -99,12 +99,12 @@ def assign_money(
     Args:
         category_id: Category to assign to (required)
         amount: Amount in currency units to add to the assigned amount.  Negative
-                takes money back to Ready to Assign (required)
+            takes money back to Ready to Assign (required)
         month: Which plan month (default: "current"):
-              • "current": This calendar month
-              • "last": The previous calendar month
-              • "next": The next calendar month
-              • A date: The month containing that date, such as 2024-03-01
+            • "current": This calendar month
+            • "last": The previous calendar month
+            • "next": The next calendar month
+            • A date: The month containing that date, such as 2024-03-01
 
     Returns:
         AssignmentResult with the category's assigned amount before and after
@@ -133,10 +133,10 @@ def set_assigned(
         category_id: Category to set (required)
         amount: The category's new assigned amount in currency units (required)
         month: Which plan month (default: "current"):
-              • "current": This calendar month
-              • "last": The previous calendar month
-              • "next": The next calendar month
-              • A date: The month containing that date, such as 2024-03-01
+            • "current": This calendar month
+            • "last": The previous calendar month
+            • "next": The next calendar month
+            • A date: The month containing that date, such as 2024-03-01
 
     Returns:
         AssignmentResult with the category's assigned amount before and after
@@ -169,10 +169,10 @@ def move_money(
         to_category_id: Category to give the money to (required)
         amount: Amount in currency units to move, greater than zero (required)
         month: Which plan month (default: "current"):
-              • "current": This calendar month
-              • "last": The previous calendar month
-              • "next": The next calendar month
-              • A date: The month containing that date, such as 2024-03-01
+            • "current": This calendar month
+            • "last": The previous calendar month
+            • "next": The next calendar month
+            • A date: The month containing that date, such as 2024-03-01
 
     Returns:
         AssignmentResult with both categories' assigned amounts before and after
@@ -240,10 +240,10 @@ def list_money_movements(
 
     Args:
         month: Which plan month (default: "current"), or null for every month:
-              • "current": This calendar month
-              • "last": The previous calendar month
-              • "next": The next calendar month
-              • A date: The month containing that date, such as 2024-03-01
+            • "current": This calendar month
+            • "last": The previous calendar month
+            • "next": The next calendar month
+            • A date: The month containing that date, such as 2024-03-01
         limit: Maximum number of movements to return per page (default: 50)
         offset: Number of movements to skip for pagination (default: 0)
 

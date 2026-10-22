@@ -173,11 +173,11 @@ def list_scheduled_transactions(
         payee_id: Only scheduled transactions with this payee (optional)
         frequency: Only scheduled transactions that repeat this often (optional)
         upcoming_days: Only scheduled transactions due within this many days
-                       (optional)
+            (optional)
         min_amount: Only amounts >= this, in currency units.  Spending is
-                    negative (optional)
+            negative (optional)
         max_amount: Only amounts <= this, in currency units.  Spending is
-                    negative (optional)
+            negative (optional)
         limit: Maximum number to return per page (default: 25)
         offset: Number to skip for pagination (default: 0)
 
@@ -287,15 +287,15 @@ def create_scheduled_transaction(
         account_id: Account it happens in (required)
         date: First date it happens: in the future, at most 5 years out (required)
         amount: Amount in currency units: negative for spending, positive for
-                income (required)
+            income (required)
         frequency: How often it repeats, or "never" for once (required)
         payee_id: Payee, by ID (optional)
         payee_name: Payee by name, when payee_id is not given.  YNAB uses the
-                    payee with this name, or creates it (optional)
+            payee with this name, or creates it (optional)
         transfer_account_id: For a transfer, the other account.  Use instead of
-                             a payee (optional)
+            a payee (optional)
         category_id: Category.  Credit card payment categories are not allowed
-                     (optional)
+            (optional)
         memo: Memo, at most 500 characters (optional)
         flag_color: Flag color (optional)
 

@@ -108,10 +108,10 @@ def get_plan_month(
 
     Args:
         month: Which plan month (default: "current"):
-              • "current": This calendar month
-              • "last": The previous calendar month
-              • "next": The next calendar month
-              • A date: The month containing that date, such as 2024-03-01
+            • "current": This calendar month
+            • "last": The previous calendar month
+            • "next": The next calendar month
+            • A date: The month containing that date, such as 2024-03-01
         limit: Maximum number of categories to return per page (default: 50)
         offset: Number of categories to skip for pagination (default: 0)
 
@@ -191,10 +191,10 @@ def get_month_category(
     Args:
         category_id: Category to look up (required)
         month: Which plan month (default: "current"):
-              • "current": This calendar month
-              • "last": The previous calendar month
-              • "next": The next calendar month
-              • A date: The month containing that date, such as 2024-03-01
+            • "current": This calendar month
+            • "last": The previous calendar month
+            • "next": The next calendar month
+            • A date: The month containing that date, such as 2024-03-01
 
     Returns:
         Category with its amounts for that month

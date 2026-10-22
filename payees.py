@@ -96,7 +96,7 @@ def find_payee(
 
     Args:
         name_search: Text to look for in payee names.  Examples: "amazon",
-                     "starbucks", "grocery" (required)
+            "starbucks", "grocery" (required)
         limit: Maximum number of matching payees to return (default: 10)
 
     Returns:

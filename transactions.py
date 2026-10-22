@@ -280,15 +280,15 @@ def list_transactions(
         since_date: Only transactions on or after this date (optional)
         until_date: Only transactions on or before this date (optional)
         status: "unapproved" for transactions waiting for the user's review, or
-                "uncategorized" for transactions with no category (optional)
+            "uncategorized" for transactions with no category (optional)
         min_amount: Only transactions with amount >= this, in currency units.
-                    Spending is negative, so -50 means "spent at most 50"
-                    (optional)
+            Spending is negative, so -50 means "spent at most 50"
+            (optional)
         max_amount: Only transactions with amount <= this, in currency units.
-                    Spending is negative, so -50 means "spent at least 50"
-                    (optional)
+            Spending is negative, so -50 means "spent at least 50"
+            (optional)
         text_search: Only transactions whose payee name, memo, or original bank
-                     payee contains this text, ignoring case (optional)
+            payee contains this text, ignoring case (optional)
         limit: Maximum number of transactions to return per page (default: 25)
         offset: Number of transactions to skip for pagination (default: 0)
 

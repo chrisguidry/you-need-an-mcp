@@ -244,15 +244,15 @@ def create_category(
         category_group_id: Group to create the category in (required)
         note: Category note (optional)
         target_amount: Target amount in currency units.  Setting it on a category
-                       with no target creates a monthly NEED target (optional)
+            with no target creates a monthly NEED target (optional)
         target_date: Date the target amount should be reached, for a balance by
-                     a date.  Cannot be combined with target_frequency (optional)
+            a date.  Cannot be combined with target_frequency (optional)
         target_needs_whole_amount: For NEED targets, whether the whole target is
-                                   needed every period (true) or the rollover
-                                   counts toward it (false) (optional)
+            needed every period (true) or the rollover
+            counts toward it (false) (optional)
         target_frequency: Make a repeating NEED target of target_amount every
-                          "weekly", "monthly", or "yearly".  Requires
-                          target_amount (optional)
+            "weekly", "monthly", or "yearly".  Requires
+            target_amount (optional)
 
     Returns:
         The new category
@@ -305,15 +305,15 @@ def update_category(
         note: New category note (optional)
         category_group_id: Group to move the category to (optional)
         target_amount: Target amount in currency units.  Setting it on a category
-                       with no target creates a monthly NEED target (optional)
+            with no target creates a monthly NEED target (optional)
         target_date: Date the target amount should be reached, for a balance by
-                     a date.  Cannot be combined with target_frequency (optional)
+            a date.  Cannot be combined with target_frequency (optional)
         target_needs_whole_amount: For NEED targets, whether the whole target is
-                                   needed every period (true) or the rollover
-                                   counts toward it (false) (optional)
+            needed every period (true) or the rollover
+            counts toward it (false) (optional)
         target_frequency: Make a repeating NEED target of target_amount every
-                          "weekly", "monthly", or "yearly".  Requires
-                          target_amount (optional)
+            "weekly", "monthly", or "yearly".  Requires
+            target_amount (optional)
 
     Returns:
         The updated category
