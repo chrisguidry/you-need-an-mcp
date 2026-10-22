@@ -504,5 +504,5 @@ class YNABRepository:
         """Get budget month data for a specific month."""
         with ynab.ApiClient(self.configuration) as api_client:
             months_api = ynab.MonthsApi(api_client)
-            response = months_api.get_budget_month(self.budget_id, month)
+            response = months_api.get_plan_month(self.budget_id, month)
             return response.data.month

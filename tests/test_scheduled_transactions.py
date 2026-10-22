@@ -10,6 +10,7 @@ from unittest.mock import MagicMock
 import ynab
 from assertions import extract_response_data
 from fastmcp.client import Client, FastMCPTransport
+from ids import uid
 
 
 async def test_list_scheduled_transactions_basic(
@@ -19,7 +20,7 @@ async def test_list_scheduled_transactions_basic(
     """Test basic scheduled transaction listing without filters."""
 
     st1 = ynab.ScheduledTransactionDetail(
-        id="st-1",
+        id=uid("st-1"),
         date_first=date(2024, 1, 1),
         date_next=date(2024, 2, 1),
         frequency="monthly",
@@ -27,11 +28,11 @@ async def test_list_scheduled_transactions_basic(
         memo="Netflix subscription",
         flag_color=ynab.TransactionFlagColor.RED,
         flag_name="Entertainment",
-        account_id="acc-1",
+        account_id=uid("acc-1"),
         account_name="Checking",
-        payee_id="payee-1",
+        payee_id=uid("payee-1"),
         payee_name="Netflix",
-        category_id="cat-1",
+        category_id=uid("cat-1"),
         category_name="Entertainment",
         transfer_account_id=None,
         deleted=False,
@@ -39,7 +40,7 @@ async def test_list_scheduled_transactions_basic(
     )
 
     st2 = ynab.ScheduledTransactionDetail(
-        id="st-2",
+        id=uid("st-2"),
         date_first=date(2024, 1, 15),
         date_next=date(2024, 1, 29),
         frequency="weekly",
@@ -47,11 +48,11 @@ async def test_list_scheduled_transactions_basic(
         memo="Weekly coffee",
         flag_color=None,
         flag_name=None,
-        account_id="acc-1",
+        account_id=uid("acc-1"),
         account_name="Checking",
-        payee_id="payee-2",
+        payee_id=uid("payee-2"),
         payee_name="Coffee Shop",
-        category_id="cat-2",
+        category_id=uid("cat-2"),
         category_name="Dining Out",
         transfer_account_id=None,
         deleted=False,
@@ -60,7 +61,7 @@ async def test_list_scheduled_transactions_basic(
 
     # Add a deleted scheduled transaction that should be filtered out
     st_deleted = ynab.ScheduledTransactionDetail(
-        id="st-deleted",
+        id=uid("st-deleted"),
         date_first=date(2024, 1, 1),
         date_next=date(2024, 3, 1),
         frequency="monthly",
@@ -68,11 +69,11 @@ async def test_list_scheduled_transactions_basic(
         memo="Deleted subscription",
         flag_color=None,
         flag_name=None,
-        account_id="acc-1",
+        account_id=uid("acc-1"),
         account_name="Checking",
-        payee_id="payee-3",
+        payee_id=uid("payee-3"),
         payee_name="Old Service",
-        category_id="cat-1",
+        category_id=uid("cat-1"),
         category_name="Entertainment",
         transfer_account_id=None,
         deleted=True,  # Should be excluded
@@ -94,13 +95,13 @@ async def test_list_scheduled_transactions_basic(
     assert len(response_data["scheduled_transactions"]) == 2
 
     # Should be sorted by next date ascending (earliest scheduled first)
-    assert response_data["scheduled_transactions"][0]["id"] == "st-2"
+    assert response_data["scheduled_transactions"][0]["id"] == str(uid("st-2"))
     assert response_data["scheduled_transactions"][0]["date_next"] == "2024-01-29"
     assert response_data["scheduled_transactions"][0]["frequency"] == "weekly"
     assert response_data["scheduled_transactions"][0]["amount"] == "-5"
     assert response_data["scheduled_transactions"][0]["payee_name"] == "Coffee Shop"
 
-    assert response_data["scheduled_transactions"][1]["id"] == "st-1"
+    assert response_data["scheduled_transactions"][1]["id"] == str(uid("st-1"))
     assert response_data["scheduled_transactions"][1]["date_next"] == "2024-02-01"
     assert response_data["scheduled_transactions"][1]["frequency"] == "monthly"
     assert response_data["scheduled_transactions"][1]["amount"] == "-120"
@@ -118,7 +119,7 @@ async def test_list_scheduled_transactions_with_frequency_filter(
     """Test scheduled transaction listing filtered by frequency."""
 
     st_monthly = ynab.ScheduledTransactionDetail(
-        id="st-monthly",
+        id=uid("st-monthly"),
         date_first=date(2024, 1, 1),
         date_next=date(2024, 2, 1),
         frequency="monthly",
@@ -126,11 +127,11 @@ async def test_list_scheduled_transactions_with_frequency_filter(
         memo="Monthly bill",
         flag_color=None,
         flag_name=None,
-        account_id="acc-1",
+        account_id=uid("acc-1"),
         account_name="Checking",
-        payee_id="payee-1",
+        payee_id=uid("payee-1"),
         payee_name="Electric Company",
-        category_id="cat-1",
+        category_id=uid("cat-1"),
         category_name="Utilities",
         transfer_account_id=None,
         deleted=False,
@@ -138,7 +139,7 @@ async def test_list_scheduled_transactions_with_frequency_filter(
     )
 
     st_weekly = ynab.ScheduledTransactionDetail(
-        id="st-weekly",
+        id=uid("st-weekly"),
         date_first=date(2024, 1, 8),
         date_next=date(2024, 1, 15),
         frequency="weekly",
@@ -146,11 +147,11 @@ async def test_list_scheduled_transactions_with_frequency_filter(
         memo="Weekly groceries",
         flag_color=None,
         flag_name=None,
-        account_id="acc-1",
+        account_id=uid("acc-1"),
         account_name="Checking",
-        payee_id="payee-2",
+        payee_id=uid("payee-2"),
         payee_name="Grocery Store",
-        category_id="cat-2",
+        category_id=uid("cat-2"),
         category_name="Groceries",
         transfer_account_id=None,
         deleted=False,
@@ -169,7 +170,7 @@ async def test_list_scheduled_transactions_with_frequency_filter(
 
     # Should only have the monthly scheduled transaction
     assert len(response_data["scheduled_transactions"]) == 1
-    assert response_data["scheduled_transactions"][0]["id"] == "st-monthly"
+    assert response_data["scheduled_transactions"][0]["id"] == str(uid("st-monthly"))
     assert response_data["scheduled_transactions"][0]["frequency"] == "monthly"
     assert (
         response_data["scheduled_transactions"][0]["payee_name"] == "Electric Company"
@@ -188,7 +189,7 @@ async def test_list_scheduled_transactions_with_upcoming_days_filter(
 
     # Scheduled for 5 days from now
     st_soon = ynab.ScheduledTransactionDetail(
-        id="st-soon",
+        id=uid("st-soon"),
         date_first=date(2024, 1, 1),
         date_next=date(2024, 1, 20),  # 5 days from "today" (2024-01-15)
         frequency="monthly",
@@ -196,11 +197,11 @@ async def test_list_scheduled_transactions_with_upcoming_days_filter(
         memo="Due soon",
         flag_color=None,
         flag_name=None,
-        account_id="acc-1",
+        account_id=uid("acc-1"),
         account_name="Checking",
-        payee_id="payee-1",
+        payee_id=uid("payee-1"),
         payee_name="Due Soon Co",
-        category_id="cat-1",
+        category_id=uid("cat-1"),
         category_name="Bills",
         transfer_account_id=None,
         deleted=False,
@@ -209,7 +210,7 @@ async def test_list_scheduled_transactions_with_upcoming_days_filter(
 
     # Scheduled for 15 days from now
     st_later = ynab.ScheduledTransactionDetail(
-        id="st-later",
+        id=uid("st-later"),
         date_first=date(2024, 1, 1),
         date_next=date(2024, 1, 30),  # 15 days from "today" (2024-01-15)
         frequency="monthly",
@@ -217,11 +218,11 @@ async def test_list_scheduled_transactions_with_upcoming_days_filter(
         memo="Due later",
         flag_color=None,
         flag_name=None,
-        account_id="acc-1",
+        account_id=uid("acc-1"),
         account_name="Checking",
-        payee_id="payee-2",
+        payee_id=uid("payee-2"),
         payee_name="Due Later Co",
-        category_id="cat-1",
+        category_id=uid("cat-1"),
         category_name="Bills",
         transfer_account_id=None,
         deleted=False,
@@ -248,7 +249,7 @@ async def test_list_scheduled_transactions_with_upcoming_days_filter(
 
         # Should only have the transaction due within 7 days
         assert len(response_data["scheduled_transactions"]) == 1
-        assert response_data["scheduled_transactions"][0]["id"] == "st-soon"
+        assert response_data["scheduled_transactions"][0]["id"] == str(uid("st-soon"))
         assert response_data["scheduled_transactions"][0]["payee_name"] == "Due Soon Co"
 
 
@@ -259,7 +260,7 @@ async def test_list_scheduled_transactions_with_amount_filter(
     """Test scheduled transaction listing filtered by amount range."""
 
     st_small = ynab.ScheduledTransactionDetail(
-        id="st-small",
+        id=uid("st-small"),
         date_first=date(2024, 1, 1),
         date_next=date(2024, 2, 1),
         frequency="monthly",
@@ -267,11 +268,11 @@ async def test_list_scheduled_transactions_with_amount_filter(
         memo="Small expense",
         flag_color=None,
         flag_name=None,
-        account_id="acc-1",
+        account_id=uid("acc-1"),
         account_name="Checking",
-        payee_id="payee-1",
+        payee_id=uid("payee-1"),
         payee_name="Small Store",
-        category_id="cat-1",
+        category_id=uid("cat-1"),
         category_name="Misc",
         transfer_account_id=None,
         deleted=False,
@@ -279,7 +280,7 @@ async def test_list_scheduled_transactions_with_amount_filter(
     )
 
     st_large = ynab.ScheduledTransactionDetail(
-        id="st-large",
+        id=uid("st-large"),
         date_first=date(2024, 1, 1),
         date_next=date(2024, 2, 1),
         frequency="monthly",
@@ -287,11 +288,11 @@ async def test_list_scheduled_transactions_with_amount_filter(
         memo="Large expense",
         flag_color=None,
         flag_name=None,
-        account_id="acc-1",
+        account_id=uid("acc-1"),
         account_name="Checking",
-        payee_id="payee-2",
+        payee_id=uid("payee-2"),
         payee_name="Large Store",
-        category_id="cat-1",
+        category_id=uid("cat-1"),
         category_name="Bills",
         transfer_account_id=None,
         deleted=False,
@@ -310,7 +311,7 @@ async def test_list_scheduled_transactions_with_amount_filter(
 
     # Should only have the large transaction (<= -$10)
     assert len(response_data["scheduled_transactions"]) == 1
-    assert response_data["scheduled_transactions"][0]["id"] == "st-large"
+    assert response_data["scheduled_transactions"][0]["id"] == str(uid("st-large"))
     assert response_data["scheduled_transactions"][0]["amount"] == "-500"
 
 
@@ -321,7 +322,7 @@ async def test_list_scheduled_transactions_with_account_filter(
     """Test scheduled transaction listing filtered by account."""
 
     st_checking = ynab.ScheduledTransactionDetail(
-        id="st-checking",
+        id=uid("st-checking"),
         date_first=date(2024, 1, 1),
         date_next=date(2024, 2, 1),
         frequency="monthly",
@@ -329,11 +330,11 @@ async def test_list_scheduled_transactions_with_account_filter(
         memo="Checking account expense",
         flag_color=None,
         flag_name=None,
-        account_id="acc-checking",
+        account_id=uid("acc-checking"),
         account_name="Checking",
-        payee_id="payee-1",
+        payee_id=uid("payee-1"),
         payee_name="Merchant A",
-        category_id="cat-1",
+        category_id=uid("cat-1"),
         category_name="Bills",
         transfer_account_id=None,
         deleted=False,
@@ -341,7 +342,7 @@ async def test_list_scheduled_transactions_with_account_filter(
     )
 
     st_savings = ynab.ScheduledTransactionDetail(
-        id="st-savings",
+        id=uid("st-savings"),
         date_first=date(2024, 1, 1),
         date_next=date(2024, 2, 1),
         frequency="monthly",
@@ -349,11 +350,11 @@ async def test_list_scheduled_transactions_with_account_filter(
         memo="Savings account expense",
         flag_color=None,
         flag_name=None,
-        account_id="acc-savings",
+        account_id=uid("acc-savings"),
         account_name="Savings",
-        payee_id="payee-2",
+        payee_id=uid("payee-2"),
         payee_name="Merchant B",
-        category_id="cat-1",
+        category_id=uid("cat-1"),
         category_name="Bills",
         transfer_account_id=None,
         deleted=False,
@@ -365,14 +366,14 @@ async def test_list_scheduled_transactions_with_account_filter(
 
     # Test filtering by checking account
     result = await mcp_client.call_tool(
-        "list_scheduled_transactions", {"account_id": "acc-checking"}
+        "list_scheduled_transactions", {"account_id": str(uid("acc-checking"))}
     )
 
     response_data = extract_response_data(result)
 
     # Should only have the checking account scheduled transaction
     assert len(response_data["scheduled_transactions"]) == 1
-    assert response_data["scheduled_transactions"][0]["id"] == "st-checking"
+    assert response_data["scheduled_transactions"][0]["id"] == str(uid("st-checking"))
     assert response_data["scheduled_transactions"][0]["account_name"] == "Checking"
 
 
@@ -383,7 +384,7 @@ async def test_list_scheduled_transactions_with_category_filter(
     """Test scheduled transaction listing filtered by category."""
 
     st_bills = ynab.ScheduledTransactionDetail(
-        id="st-bills",
+        id=uid("st-bills"),
         date_first=date(2024, 1, 1),
         date_next=date(2024, 2, 1),
         frequency="monthly",
@@ -391,11 +392,11 @@ async def test_list_scheduled_transactions_with_category_filter(
         memo="Monthly bill",
         flag_color=None,
         flag_name=None,
-        account_id="acc-1",
+        account_id=uid("acc-1"),
         account_name="Checking",
-        payee_id="payee-1",
+        payee_id=uid("payee-1"),
         payee_name="Utility Co",
-        category_id="cat-bills",
+        category_id=uid("cat-bills"),
         category_name="Bills",
         transfer_account_id=None,
         deleted=False,
@@ -403,7 +404,7 @@ async def test_list_scheduled_transactions_with_category_filter(
     )
 
     st_entertainment = ynab.ScheduledTransactionDetail(
-        id="st-entertainment",
+        id=uid("st-entertainment"),
         date_first=date(2024, 1, 1),
         date_next=date(2024, 2, 1),
         frequency="monthly",
@@ -411,11 +412,11 @@ async def test_list_scheduled_transactions_with_category_filter(
         memo="Entertainment subscription",
         flag_color=None,
         flag_name=None,
-        account_id="acc-1",
+        account_id=uid("acc-1"),
         account_name="Checking",
-        payee_id="payee-2",
+        payee_id=uid("payee-2"),
         payee_name="Streaming Service",
-        category_id="cat-entertainment",
+        category_id=uid("cat-entertainment"),
         category_name="Entertainment",
         transfer_account_id=None,
         deleted=False,
@@ -430,14 +431,14 @@ async def test_list_scheduled_transactions_with_category_filter(
 
     # Test filtering by bills category
     result = await mcp_client.call_tool(
-        "list_scheduled_transactions", {"category_id": "cat-bills"}
+        "list_scheduled_transactions", {"category_id": str(uid("cat-bills"))}
     )
 
     response_data = extract_response_data(result)
 
     # Should only have the bills category scheduled transaction
     assert len(response_data["scheduled_transactions"]) == 1
-    assert response_data["scheduled_transactions"][0]["id"] == "st-bills"
+    assert response_data["scheduled_transactions"][0]["id"] == str(uid("st-bills"))
     assert response_data["scheduled_transactions"][0]["category_name"] == "Bills"
 
 
@@ -448,7 +449,7 @@ async def test_list_scheduled_transactions_with_min_amount_filter(
     """Test scheduled transaction listing filtered by minimum amount."""
 
     st_small = ynab.ScheduledTransactionDetail(
-        id="st-small",
+        id=uid("st-small"),
         date_first=date(2024, 1, 1),
         date_next=date(2024, 2, 1),
         frequency="monthly",
@@ -456,11 +457,11 @@ async def test_list_scheduled_transactions_with_min_amount_filter(
         memo="Small expense",
         flag_color=None,
         flag_name=None,
-        account_id="acc-1",
+        account_id=uid("acc-1"),
         account_name="Checking",
-        payee_id="payee-1",
+        payee_id=uid("payee-1"),
         payee_name="Small Store",
-        category_id="cat-1",
+        category_id=uid("cat-1"),
         category_name="Misc",
         transfer_account_id=None,
         deleted=False,
@@ -468,7 +469,7 @@ async def test_list_scheduled_transactions_with_min_amount_filter(
     )
 
     st_large = ynab.ScheduledTransactionDetail(
-        id="st-large",
+        id=uid("st-large"),
         date_first=date(2024, 1, 1),
         date_next=date(2024, 2, 1),
         frequency="monthly",
@@ -476,11 +477,11 @@ async def test_list_scheduled_transactions_with_min_amount_filter(
         memo="Large expense",
         flag_color=None,
         flag_name=None,
-        account_id="acc-1",
+        account_id=uid("acc-1"),
         account_name="Checking",
-        payee_id="payee-2",
+        payee_id=uid("payee-2"),
         payee_name="Large Store",
-        category_id="cat-1",
+        category_id=uid("cat-1"),
         category_name="Bills",
         transfer_account_id=None,
         deleted=False,
@@ -499,7 +500,7 @@ async def test_list_scheduled_transactions_with_min_amount_filter(
 
     # Should only have the small transaction (>= -$5)
     assert len(response_data["scheduled_transactions"]) == 1
-    assert response_data["scheduled_transactions"][0]["id"] == "st-small"
+    assert response_data["scheduled_transactions"][0]["id"] == str(uid("st-small"))
     assert response_data["scheduled_transactions"][0]["amount"] == "-1"
 
 
@@ -510,7 +511,7 @@ async def test_list_scheduled_transactions_with_payee_filter(
     """Test scheduled transaction listing filtered by payee."""
 
     st_netflix = ynab.ScheduledTransactionDetail(
-        id="st-netflix",
+        id=uid("st-netflix"),
         date_first=date(2024, 1, 1),
         date_next=date(2024, 2, 1),
         frequency="monthly",
@@ -518,11 +519,11 @@ async def test_list_scheduled_transactions_with_payee_filter(
         memo="Netflix subscription",
         flag_color=None,
         flag_name=None,
-        account_id="acc-1",
+        account_id=uid("acc-1"),
         account_name="Checking",
-        payee_id="payee-netflix",
+        payee_id=uid("payee-netflix"),
         payee_name="Netflix",
-        category_id="cat-1",
+        category_id=uid("cat-1"),
         category_name="Entertainment",
         transfer_account_id=None,
         deleted=False,
@@ -530,7 +531,7 @@ async def test_list_scheduled_transactions_with_payee_filter(
     )
 
     st_spotify = ynab.ScheduledTransactionDetail(
-        id="st-spotify",
+        id=uid("st-spotify"),
         date_first=date(2024, 1, 1),
         date_next=date(2024, 2, 1),
         frequency="monthly",
@@ -538,11 +539,11 @@ async def test_list_scheduled_transactions_with_payee_filter(
         memo="Spotify subscription",
         flag_color=None,
         flag_name=None,
-        account_id="acc-1",
+        account_id=uid("acc-1"),
         account_name="Checking",
-        payee_id="payee-spotify",
+        payee_id=uid("payee-spotify"),
         payee_name="Spotify",
-        category_id="cat-1",
+        category_id=uid("cat-1"),
         category_name="Entertainment",
         transfer_account_id=None,
         deleted=False,
@@ -554,14 +555,14 @@ async def test_list_scheduled_transactions_with_payee_filter(
 
     # Test filtering by Netflix payee
     result = await mcp_client.call_tool(
-        "list_scheduled_transactions", {"payee_id": "payee-netflix"}
+        "list_scheduled_transactions", {"payee_id": str(uid("payee-netflix"))}
     )
 
     response_data = extract_response_data(result)
 
     # Should only have the Netflix scheduled transaction
     assert len(response_data["scheduled_transactions"]) == 1
-    assert response_data["scheduled_transactions"][0]["id"] == "st-netflix"
+    assert response_data["scheduled_transactions"][0]["id"] == str(uid("st-netflix"))
     assert response_data["scheduled_transactions"][0]["payee_name"] == "Netflix"
 
 
@@ -575,7 +576,7 @@ async def test_list_scheduled_transactions_pagination(
     scheduled_transactions = []
     for i in range(15):
         st = ynab.ScheduledTransactionDetail(
-            id=f"st-{i}",
+            id=uid(f"st-{i}"),
             date_first=date(2024, 1, 1),
             date_next=date(2024, 2, i + 1),  # Different next dates for sorting
             frequency="monthly",
@@ -583,11 +584,11 @@ async def test_list_scheduled_transactions_pagination(
             memo=f"Transaction {i}",
             flag_color=None,
             flag_name=None,
-            account_id="acc-1",
+            account_id=uid("acc-1"),
             account_name="Checking",
-            payee_id=f"payee-{i}",
+            payee_id=uid(f"payee-{i}"),
             payee_name=f"Payee {i}",
-            category_id="cat-1",
+            category_id=uid("cat-1"),
             category_name="Bills",
             transfer_account_id=None,
             deleted=False,
@@ -631,33 +632,33 @@ async def test_list_scheduled_transactions_with_subtransactions(
 
     # Create scheduled subtransactions
     sub1 = ynab.ScheduledSubTransaction(
-        id="sub-1",
-        scheduled_transaction_id="st-split",
+        id=uid("sub-1"),
+        scheduled_transaction_id=uid("st-split"),
         amount=-30_000,  # -$30.00 for groceries
         memo="Groceries portion",
-        payee_id="payee-1",
+        payee_id=uid("payee-1"),
         payee_name="Grocery Store",
-        category_id="cat-groceries",
+        category_id=uid("cat-groceries"),
         category_name="Groceries",
         transfer_account_id=None,
         deleted=False,
     )
 
     sub2 = ynab.ScheduledSubTransaction(
-        id="sub-2",
-        scheduled_transaction_id="st-split",
+        id=uid("sub-2"),
+        scheduled_transaction_id=uid("st-split"),
         amount=-20_000,  # -$20.00 for household
         memo="Household portion",
-        payee_id="payee-1",
+        payee_id=uid("payee-1"),
         payee_name="Grocery Store",
-        category_id="cat-household",
+        category_id=uid("cat-household"),
         category_name="Household",
         transfer_account_id=None,
         deleted=False,
     )
 
     st_split = ynab.ScheduledTransactionDetail(
-        id="st-split",
+        id=uid("st-split"),
         date_first=date(2024, 1, 1),
         date_next=date(2024, 2, 1),
         frequency="monthly",
@@ -665,9 +666,9 @@ async def test_list_scheduled_transactions_with_subtransactions(
         memo="Split transaction",
         flag_color=None,
         flag_name=None,
-        account_id="acc-1",
+        account_id=uid("acc-1"),
         account_name="Checking",
-        payee_id="payee-1",
+        payee_id=uid("payee-1"),
         payee_name="Grocery Store",
         category_id=None,  # Split transactions don't have a main category
         category_name=None,
@@ -687,18 +688,18 @@ async def test_list_scheduled_transactions_with_subtransactions(
     assert len(response_data["scheduled_transactions"]) == 1
     st = response_data["scheduled_transactions"][0]
 
-    assert st["id"] == "st-split"
+    assert st["id"] == str(uid("st-split"))
     assert st["amount"] == "-50"
     assert st["memo"] == "Split transaction"
 
     # Check subtransactions
     assert len(st["subtransactions"]) == 2
 
-    assert st["subtransactions"][0]["id"] == "sub-1"
+    assert st["subtransactions"][0]["id"] == str(uid("sub-1"))
     assert st["subtransactions"][0]["amount"] == "-30"
     assert st["subtransactions"][0]["category_name"] == "Groceries"
 
-    assert st["subtransactions"][1]["id"] == "sub-2"
+    assert st["subtransactions"][1]["id"] == str(uid("sub-2"))
     assert st["subtransactions"][1]["amount"] == "-20"
     assert st["subtransactions"][1]["category_name"] == "Household"
 
@@ -711,33 +712,33 @@ async def test_list_scheduled_transactions_with_deleted_subtransactions(
 
     # Create active and deleted scheduled subtransactions
     sub_active = ynab.ScheduledSubTransaction(
-        id="sub-active",
-        scheduled_transaction_id="st-mixed",
+        id=uid("sub-active"),
+        scheduled_transaction_id=uid("st-mixed"),
         amount=-30_000,  # -$30.00
         memo="Active subtransaction",
-        payee_id="payee-1",
+        payee_id=uid("payee-1"),
         payee_name="Store",
-        category_id="cat-1",
+        category_id=uid("cat-1"),
         category_name="Active Category",
         transfer_account_id=None,
         deleted=False,
     )
 
     sub_deleted = ynab.ScheduledSubTransaction(
-        id="sub-deleted",
-        scheduled_transaction_id="st-mixed",
+        id=uid("sub-deleted"),
+        scheduled_transaction_id=uid("st-mixed"),
         amount=-20_000,  # -$20.00
         memo="Deleted subtransaction",
-        payee_id="payee-1",
+        payee_id=uid("payee-1"),
         payee_name="Store",
-        category_id="cat-2",
+        category_id=uid("cat-2"),
         category_name="Deleted Category",
         transfer_account_id=None,
         deleted=True,  # Should be excluded
     )
 
     st_mixed = ynab.ScheduledTransactionDetail(
-        id="st-mixed",
+        id=uid("st-mixed"),
         date_first=date(2024, 1, 1),
         date_next=date(2024, 2, 1),
         frequency="monthly",
@@ -745,9 +746,9 @@ async def test_list_scheduled_transactions_with_deleted_subtransactions(
         memo="Mixed subtransactions",
         flag_color=None,
         flag_name=None,
-        account_id="acc-1",
+        account_id=uid("acc-1"),
         account_name="Checking",
-        payee_id="payee-1",
+        payee_id=uid("payee-1"),
         payee_name="Store",
         category_id=None,
         category_name=None,
@@ -767,10 +768,10 @@ async def test_list_scheduled_transactions_with_deleted_subtransactions(
     assert len(response_data["scheduled_transactions"]) == 1
     st = response_data["scheduled_transactions"][0]
 
-    assert st["id"] == "st-mixed"
+    assert st["id"] == str(uid("st-mixed"))
     assert st["amount"] == "-50"
 
     # Should only have the active subtransaction (deleted one excluded)
     assert len(st["subtransactions"]) == 1
-    assert st["subtransactions"][0]["id"] == "sub-active"
+    assert st["subtransactions"][0]["id"] == str(uid("sub-active"))
     assert st["subtransactions"][0]["category_name"] == "Active Category"

@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 5
 requires-python = ">=3.12"
 resolution-markers = [
     "python_full_version >= '3.15'",
@@ -1754,17 +1754,18 @@ wheels = [
 
 [[package]]
 name = "ynab"
-version = "1.8.0"
+version = "4.4.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
+    { name = "certifi" },
     { name = "pydantic" },
     { name = "python-dateutil" },
     { name = "typing-extensions" },
     { name = "urllib3" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/1c/14/8105e3dd37d0031e0a478cb9826283500043e255e0cf71fbbfb1d4340e2b/ynab-1.8.0.tar.gz", hash = "sha256:f0daa602aa53ec33b094d98c1e84c4487e5a8c3dafbd400670ce892ed32bf12f", size = 64828, upload-time = "2025-08-05T22:30:45.051Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/30/dc/af96462c96a897dcf79dbad800e031b5cf7d11397f94572101c6b45bde1c/ynab-4.4.1.tar.gz", hash = "sha256:d618b182d482a0180ae243628716a5402ebaca7c02b387644fc08bb7ba52e1f6", size = 78802, upload-time = "2026-10-21T20:48:54.113Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/9b/1e/75563aead9de0499ddcb0ed2ba80d380c3b272d73e1607bdd24930553ec7/ynab-1.8.0-py3-none-any.whl", hash = "sha256:035a294a2e787c93f002402bc02c9065ec88cba961deddfda806af14435bfa82", size = 208595, upload-time = "2025-08-05T22:30:43.758Z" },
+    { url = "https://files.pythonhosted.org/packages/b2/3b/16b535dd5f9bda4e7559c2cc991591b901d01005787f7a461c1a7a8d429c/ynab-4.4.1-py3-none-any.whl", hash = "sha256:8337c94e50c296f4ff1d26c84c436f7e3c4f960278c7f5278de7ccbae9eb59b8", size = 279854, upload-time = "2026-10-21T20:48:52.58Z" },
 ]
 
 [[package]]
@@ -1793,7 +1794,7 @@ dev = [
 requires-dist = [
     { name = "fastmcp", specifier = ">=4.1.3" },
     { name = "pydantic", specifier = ">=2.11.5" },
-    { name = "ynab", specifier = ">=1.8.0,<2" },
+    { name = "ynab", specifier = ">=4.4.1,<5" },
 ]
 
 [package.metadata.requires-dev]

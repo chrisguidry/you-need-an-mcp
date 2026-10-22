@@ -8,6 +8,7 @@ import ynab
 from assertions import assert_pagination_info, extract_response_data
 from conftest import create_ynab_account
 from fastmcp.client import Client, FastMCPTransport
+from ids import uid
 
 
 async def test_list_accounts_success(
@@ -16,14 +17,14 @@ async def test_list_accounts_success(
 ) -> None:
     """Test successful account listing."""
     open_account = create_ynab_account(
-        id="acc-1",
+        id=uid("acc-1"),
         name="Checking",
         account_type=ynab.AccountType.CHECKING,
         note="Main account",
     )
 
     closed_account = create_ynab_account(
-        id="acc-2",
+        id=uid("acc-2"),
         name="Savings",
         account_type=ynab.AccountType.SAVINGS,
         closed=True,  # Should be excluded
@@ -39,7 +40,7 @@ async def test_list_accounts_success(
     # Should only include open account
     accounts = response_data["accounts"]
     assert len(accounts) == 1
-    assert accounts[0]["id"] == "acc-1"
+    assert accounts[0]["id"] == str(uid("acc-1"))
     assert accounts[0]["name"] == "Checking"
 
     assert_pagination_info(
@@ -56,21 +57,21 @@ async def test_list_accounts_filters_closed_accounts(
 ) -> None:
     """Test that list_accounts automatically excludes closed accounts."""
     open_checking = create_ynab_account(
-        id="acc-1",
+        id=uid("acc-1"),
         name="Checking",
         account_type=ynab.AccountType.CHECKING,
         closed=False,
     )
 
     closed_savings = create_ynab_account(
-        id="acc-2",
+        id=uid("acc-2"),
         name="Old Savings",
         account_type=ynab.AccountType.SAVINGS,
         closed=True,
     )
 
     open_credit = create_ynab_account(
-        id="acc-3",
+        id=uid("acc-3"),
         name="Credit Card",
         account_type=ynab.AccountType.CREDITCARD,
         closed=False,
@@ -104,7 +105,7 @@ async def test_list_accounts_pagination(
     for i in range(5):
         accounts.append(
             create_ynab_account(
-                id=f"acc-{i}",
+                id=uid(f"acc-{i}"),
                 name=f"Account {i}",
                 closed=False,
             )
@@ -143,7 +144,7 @@ async def test_list_accounts_with_repository_sync(
     mcp_client: Client[FastMCPTransport],
 ) -> None:
     """Test that list_accounts triggers repository sync when needed."""
-    account = create_ynab_account(id="acc-1", name="Test Account")
+    account = create_ynab_account(id=uid("acc-1"), name="Test Account")
 
     # Mock repository to return empty initially (not initialized)
     mock_repository.get_accounts.return_value = [account]
@@ -156,7 +157,7 @@ async def test_list_accounts_with_repository_sync(
 
     # Verify account data was returned
     assert len(response_data["accounts"]) == 1
-    assert response_data["accounts"][0]["id"] == "acc-1"
+    assert response_data["accounts"][0]["id"] == str(uid("acc-1"))
 
 
 async def test_list_accounts_account_types(
@@ -165,28 +166,28 @@ async def test_list_accounts_account_types(
 ) -> None:
     """Test that different account types are handled correctly."""
     checking_account = create_ynab_account(
-        id="acc-checking",
+        id=uid("acc-checking"),
         name="My Checking",
         account_type=ynab.AccountType.CHECKING,
         on_budget=True,
     )
 
     savings_account = create_ynab_account(
-        id="acc-savings",
+        id=uid("acc-savings"),
         name="Emergency Fund",
         account_type=ynab.AccountType.SAVINGS,
         on_budget=True,
     )
 
     credit_card = create_ynab_account(
-        id="acc-credit",
+        id=uid("acc-credit"),
         name="Visa Card",
         account_type=ynab.AccountType.CREDITCARD,
         on_budget=True,
     )
 
     investment_account = create_ynab_account(
-        id="acc-investment",
+        id=uid("acc-investment"),
         name="401k",
         account_type=ynab.AccountType.OTHERASSET,
         on_budget=False,  # Typically off-budget
@@ -208,15 +209,15 @@ async def test_list_accounts_account_types(
 
     # Verify account types are preserved
     account_types = {acc["id"]: acc["type"] for acc in accounts}
-    assert account_types["acc-checking"] == "checking"
-    assert account_types["acc-savings"] == "savings"
-    assert account_types["acc-credit"] == "creditCard"
-    assert account_types["acc-investment"] == "otherAsset"
+    assert account_types[str(uid("acc-checking"))] == "checking"
+    assert account_types[str(uid("acc-savings"))] == "savings"
+    assert account_types[str(uid("acc-credit"))] == "creditCard"
+    assert account_types[str(uid("acc-investment"))] == "otherAsset"
 
     # Verify on_budget status
     on_budget_status = {acc["id"]: acc["on_budget"] for acc in accounts}
-    assert on_budget_status["acc-checking"] is True
-    assert on_budget_status["acc-investment"] is False
+    assert on_budget_status[str(uid("acc-checking"))] is True
+    assert on_budget_status[str(uid("acc-investment"))] is False
 
 
 async def test_list_accounts_with_debt_fields(
@@ -226,7 +227,7 @@ async def test_list_accounts_with_debt_fields(
     """Test that debt-related fields are properly included for debt accounts."""
     # Create a mortgage account with debt fields
     mortgage_account = create_ynab_account(
-        id="acc-mortgage",
+        id=uid("acc-mortgage"),
         name="Home Mortgage",
         account_type=ynab.AccountType.MORTGAGE,
         on_budget=False,
@@ -247,7 +248,7 @@ async def test_list_accounts_with_debt_fields(
 
     # Create a credit card with empty debt fields
     credit_card = create_ynab_account(
-        id="acc-credit",
+        id=uid("acc-credit"),
         name="Visa Card",
         account_type=ynab.AccountType.CREDITCARD,
         on_budget=True,
@@ -259,7 +260,7 @@ async def test_list_accounts_with_debt_fields(
 
     # Create a regular checking account without debt fields
     checking_account = create_ynab_account(
-        id="acc-checking",
+        id=uid("acc-checking"),
         name="Checking",
         account_type=ynab.AccountType.CHECKING,
         balance=5000_000,  # $5,000 in milliunits
@@ -278,7 +279,7 @@ async def test_list_accounts_with_debt_fields(
     assert len(accounts) == 3
 
     # Find mortgage account and verify debt fields
-    mortgage = next(acc for acc in accounts if acc["id"] == "acc-mortgage")
+    mortgage = next(acc for acc in accounts if acc["id"] == str(uid("acc-mortgage")))
     assert mortgage["debt_interest_rates"] == {
         "2024-01-01": "0.03375",  # 3.375% as decimal
         "2024-07-01": "0.0325",  # 3.25% as decimal
@@ -293,13 +294,13 @@ async def test_list_accounts_with_debt_fields(
     }
 
     # Verify credit card has null debt fields (empty dicts become None)
-    credit = next(acc for acc in accounts if acc["id"] == "acc-credit")
+    credit = next(acc for acc in accounts if acc["id"] == str(uid("acc-credit")))
     assert credit["debt_interest_rates"] is None
     assert credit["debt_minimum_payments"] is None
     assert credit["debt_escrow_amounts"] is None
 
     # Verify checking account has null debt fields
-    checking = next(acc for acc in accounts if acc["id"] == "acc-checking")
+    checking = next(acc for acc in accounts if acc["id"] == str(uid("acc-checking")))
     assert checking["debt_interest_rates"] is None
     assert checking["debt_minimum_payments"] is None
     assert checking["debt_escrow_amounts"] is None

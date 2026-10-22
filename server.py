@@ -4,6 +4,7 @@ from collections.abc import Sequence
 from datetime import date, datetime
 from decimal import Decimal
 from typing import Literal
+from uuid import UUID
 
 import ynab
 from fastmcp import FastMCP
@@ -103,7 +104,7 @@ def _filter_active_items[T](
 
 def _build_category_group_map(
     category_groups: list[ynab.CategoryGroupWithCategories],
-) -> dict[str, str]:
+) -> dict[UUID, str]:
     """Build a mapping of category_id to category_group_name."""
     mapping = {}
     for category_group in category_groups:
@@ -311,7 +312,7 @@ def get_month_category_by_id(
     # Fetch category groups to get group name
     category_groups = _repository.get_category_groups()
     category_group_map = _build_category_group_map(category_groups)
-    group_name = category_group_map.get(category_id)
+    group_name = category_group_map.get(category.id)
 
     return Category.from_ynab(category, group_name)
 
@@ -498,9 +499,9 @@ def find_payee(
 
 @mcp.tool()
 def list_scheduled_transactions(
-    account_id: str | None = None,
-    category_id: str | None = None,
-    payee_id: str | None = None,
+    account_id: UUID | None = None,
+    category_id: UUID | None = None,
+    payee_id: UUID | None = None,
     frequency: str | None = None,
     upcoming_days: int | None = None,
     min_amount: Decimal | None = None,
@@ -630,7 +631,7 @@ def update_category_budget(
     # Get category group name for the response
     category_groups = _repository.get_category_groups()
     category_group_map = _build_category_group_map(category_groups)
-    group_name = category_group_map.get(category_id)
+    group_name = category_group_map.get(updated_category.id)
 
     return Category.from_ynab(updated_category, group_name)
 

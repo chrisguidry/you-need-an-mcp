@@ -10,6 +10,7 @@ import pytest
 import ynab
 from assertions import extract_response_data
 from fastmcp.client import Client, FastMCPTransport
+from ids import uid
 
 
 @pytest.fixture
@@ -27,8 +28,9 @@ async def test_get_budget_month_success(
 ) -> None:
     """Test successful budget month retrieval."""
     category = ynab.Category(
-        id="cat-1",
-        category_group_id="group-1",
+        internal=False,
+        id=uid("cat-1"),
+        category_group_id=uid("group-1"),
         category_group_name="Monthly Bills",
         name="Groceries",
         hidden=False,
@@ -70,7 +72,8 @@ async def test_get_budget_month_success(
 
     # Mock the categories API call for getting group names
     category_group = ynab.CategoryGroupWithCategories(
-        id="group-1",
+        internal=False,
+        id=uid("group-1"),
         name="Monthly Bills",
         hidden=False,
         deleted=False,
@@ -85,7 +88,7 @@ async def test_get_budget_month_success(
     response_data = extract_response_data(result)
     assert response_data["note"] == "January budget"
     assert len(response_data["categories"]) == 1
-    assert response_data["categories"][0]["id"] == "cat-1"
+    assert response_data["categories"][0]["id"] == str(uid("cat-1"))
     assert response_data["categories"][0]["category_group_name"] == "Monthly Bills"
 
 
@@ -97,8 +100,9 @@ async def test_get_month_category_by_id_success(
 ) -> None:
     """Test successful month category retrieval by ID."""
     mock_category = ynab.Category(
-        id="cat-1",
-        category_group_id="group-1",
+        internal=False,
+        id=uid("cat-1"),
+        category_group_id=uid("group-1"),
         category_group_name="Monthly Bills",
         name="Groceries",
         hidden=False,
@@ -128,7 +132,8 @@ async def test_get_month_category_by_id_success(
 
     # Mock the categories API call for getting group names
     category_group = ynab.CategoryGroupWithCategories(
-        id="group-1",
+        internal=False,
+        id=uid("group-1"),
         name="Monthly Bills",
         hidden=False,
         deleted=False,
@@ -139,11 +144,11 @@ async def test_get_month_category_by_id_success(
 
     result = await mcp_client.call_tool(
         "get_month_category_by_id",
-        {"category_id": "cat-1"},
+        {"category_id": str(uid("cat-1"))},
     )
 
     response_data = extract_response_data(result)
-    assert response_data["id"] == "cat-1"
+    assert response_data["id"] == str(uid("cat-1"))
     assert response_data["name"] == "Groceries"
     assert response_data["category_group_name"] == "Monthly Bills"
 
@@ -155,8 +160,9 @@ async def test_get_month_category_by_id_default_budget(
 ) -> None:
     """Test month category retrieval using default budget."""
     mock_category = ynab.Category(
-        id="cat-2",
-        category_group_id="group-2",
+        internal=False,
+        id=uid("cat-2"),
+        category_group_id=uid("group-2"),
         category_group_name="Fun Money",
         name="Entertainment",
         hidden=False,
@@ -186,7 +192,8 @@ async def test_get_month_category_by_id_default_budget(
 
     # Mock the categories API call for getting group names
     category_group = ynab.CategoryGroupWithCategories(
-        id="group-2",
+        internal=False,
+        id=uid("group-2"),
         name="Fun Money",
         hidden=False,
         deleted=False,
@@ -197,11 +204,11 @@ async def test_get_month_category_by_id_default_budget(
 
     # Call without budget_id to test default
     result = await mcp_client.call_tool(
-        "get_month_category_by_id", {"category_id": "cat-2"}
+        "get_month_category_by_id", {"category_id": str(uid("cat-2"))}
     )
 
     response_data = extract_response_data(result)
-    assert response_data["id"] == "cat-2"
+    assert response_data["id"] == str(uid("cat-2"))
     assert response_data["name"] == "Entertainment"
     assert response_data["category_group_name"] == "Fun Money"
 
@@ -213,8 +220,9 @@ async def test_get_month_category_by_id_no_groups(
 ) -> None:
     """Test month category retrieval when no category groups exist."""
     mock_category = ynab.Category(
-        id="cat-orphan",
-        category_group_id="group-missing",
+        internal=False,
+        id=uid("cat-orphan"),
+        category_group_id=uid("group-missing"),
         category_group_name="Missing Group",
         name="Orphan Category",
         hidden=False,
@@ -246,11 +254,11 @@ async def test_get_month_category_by_id_no_groups(
     mock_repository.get_category_groups.return_value = []
 
     result = await mcp_client.call_tool(
-        "get_month_category_by_id", {"category_id": "cat-orphan"}
+        "get_month_category_by_id", {"category_id": str(uid("cat-orphan"))}
     )
 
     response_data = extract_response_data(result)
-    assert response_data["id"] == "cat-orphan"
+    assert response_data["id"] == str(uid("cat-orphan"))
     assert response_data["category_group_name"] is None
 
 
@@ -261,8 +269,9 @@ async def test_get_month_category_by_id_category_not_in_groups(
 ) -> None:
     """Test month category retrieval when category is not found in any group."""
     mock_category = ynab.Category(
-        id="cat-notfound",
-        category_group_id="group-old",
+        internal=False,
+        id=uid("cat-notfound"),
+        category_group_id=uid("group-old"),
         category_group_name="Old Group",
         name="Not Found Category",
         hidden=False,
@@ -289,8 +298,9 @@ async def test_get_month_category_by_id_category_not_in_groups(
 
     # Create some other categories that don't match
     other_category1 = ynab.Category(
-        id="cat-other1",
-        category_group_id="group-1",
+        internal=False,
+        id=uid("cat-other1"),
+        category_group_id=uid("group-1"),
         category_group_name="Group 1",
         name="Other Category 1",
         hidden=False,
@@ -316,8 +326,9 @@ async def test_get_month_category_by_id_category_not_in_groups(
     )
 
     other_category2 = ynab.Category(
-        id="cat-other2",
-        category_group_id="group-2",
+        internal=False,
+        id=uid("cat-other2"),
+        category_group_id=uid("group-2"),
         category_group_name="Group 2",
         name="Other Category 2",
         hidden=False,
@@ -347,7 +358,8 @@ async def test_get_month_category_by_id_category_not_in_groups(
 
     # Mock category groups with categories that don't include our target
     category_group1 = ynab.CategoryGroupWithCategories(
-        id="group-1",
+        internal=False,
+        id=uid("group-1"),
         name="Group 1",
         hidden=False,
         deleted=False,
@@ -355,7 +367,8 @@ async def test_get_month_category_by_id_category_not_in_groups(
     )
 
     category_group2 = ynab.CategoryGroupWithCategories(
-        id="group-2",
+        internal=False,
+        id=uid("group-2"),
         name="Group 2",
         hidden=False,
         deleted=False,
@@ -364,7 +377,8 @@ async def test_get_month_category_by_id_category_not_in_groups(
 
     # Add an empty category group to test the empty categories branch
     empty_group = ynab.CategoryGroupWithCategories(
-        id="group-empty",
+        internal=False,
+        id=uid("group-empty"),
         name="Empty Group",
         hidden=False,
         deleted=False,
@@ -379,11 +393,11 @@ async def test_get_month_category_by_id_category_not_in_groups(
     ]
 
     result = await mcp_client.call_tool(
-        "get_month_category_by_id", {"category_id": "cat-notfound"}
+        "get_month_category_by_id", {"category_id": str(uid("cat-notfound"))}
     )
 
     response_data = extract_response_data(result)
-    assert response_data["id"] == "cat-notfound"
+    assert response_data["id"] == str(uid("cat-notfound"))
     assert response_data["category_group_name"] is None
 
 
@@ -395,8 +409,9 @@ async def test_get_budget_month_with_default_budget(
 ) -> None:
     """Test budget month retrieval with default budget."""
     category = ynab.Category(
-        id="cat-default",
-        category_group_id="group-default",
+        internal=False,
+        id=uid("cat-default"),
+        category_group_id=uid("group-default"),
         category_group_name="Default Group",
         name="Default Category",
         hidden=False,
@@ -438,7 +453,8 @@ async def test_get_budget_month_with_default_budget(
 
     # Mock the categories API call for getting group names
     category_group = ynab.CategoryGroupWithCategories(
-        id="group-default",
+        internal=False,
+        id=uid("group-default"),
         name="Default Group",
         hidden=False,
         deleted=False,
@@ -452,7 +468,7 @@ async def test_get_budget_month_with_default_budget(
 
     response_data = extract_response_data(result)
     assert len(response_data["categories"]) == 1
-    assert response_data["categories"][0]["id"] == "cat-default"
+    assert response_data["categories"][0]["id"] == str(uid("cat-default"))
 
 
 async def test_get_budget_month_filters_deleted_and_hidden(
@@ -464,8 +480,9 @@ async def test_get_budget_month_filters_deleted_and_hidden(
     """Test that get_budget_month filters out deleted and hidden categories."""
     # Create active category
     active_category = ynab.Category(
-        id="cat-active",
-        category_group_id="group-1",
+        internal=False,
+        id=uid("cat-active"),
+        category_group_id=uid("group-1"),
         category_group_name="Group 1",
         name="Active Category",
         hidden=False,
@@ -492,8 +509,9 @@ async def test_get_budget_month_filters_deleted_and_hidden(
 
     # Create deleted category (should be filtered out)
     deleted_category = ynab.Category(
-        id="cat-deleted",
-        category_group_id="group-1",
+        internal=False,
+        id=uid("cat-deleted"),
+        category_group_id=uid("group-1"),
         category_group_name="Group 1",
         name="Deleted Category",
         hidden=False,
@@ -520,8 +538,9 @@ async def test_get_budget_month_filters_deleted_and_hidden(
 
     # Create hidden category (should be filtered out)
     hidden_category = ynab.Category(
-        id="cat-hidden",
-        category_group_id="group-1",
+        internal=False,
+        id=uid("cat-hidden"),
+        category_group_id=uid("group-1"),
         category_group_name="Group 1",
         name="Hidden Category",
         hidden=True,
@@ -563,7 +582,8 @@ async def test_get_budget_month_filters_deleted_and_hidden(
 
     # Mock the categories API call for getting group names
     category_group = ynab.CategoryGroupWithCategories(
-        id="group-1",
+        internal=False,
+        id=uid("group-1"),
         name="Group 1",
         hidden=False,
         deleted=False,
@@ -577,4 +597,4 @@ async def test_get_budget_month_filters_deleted_and_hidden(
     response_data = extract_response_data(result)
     # Should only include the active category
     assert len(response_data["categories"]) == 1
-    assert response_data["categories"][0]["id"] == "cat-active"
+    assert response_data["categories"][0]["id"] == str(uid("cat-active"))

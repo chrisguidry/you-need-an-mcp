@@ -8,6 +8,7 @@ import ynab
 from assertions import assert_pagination_info, extract_response_data
 from conftest import create_ynab_category
 from fastmcp.client import Client, FastMCPTransport
+from ids import uid
 
 
 async def test_list_categories_success(
@@ -15,7 +16,7 @@ async def test_list_categories_success(
 ) -> None:
     """Test successful category listing."""
     visible_category = create_ynab_category(
-        id="cat-1",
+        id=uid("cat-1"),
         name="Groceries",
         note="Food shopping",
         goal_type="TB",
@@ -24,7 +25,7 @@ async def test_list_categories_success(
     )
 
     hidden_category = create_ynab_category(
-        id="cat-hidden",
+        id=uid("cat-hidden"),
         name="Hidden Category",
         hidden=True,  # Should be excluded
         budgeted=10_000,
@@ -33,7 +34,8 @@ async def test_list_categories_success(
     )
 
     category_group = ynab.CategoryGroupWithCategories(
-        id="group-1",
+        internal=False,
+        id=uid("group-1"),
         name="Monthly Bills",
         hidden=False,
         deleted=False,
@@ -49,7 +51,7 @@ async def test_list_categories_success(
     # Should only include visible category
     categories = response_data["categories"]
     assert len(categories) == 1
-    assert categories[0]["id"] == "cat-1"
+    assert categories[0]["id"] == str(uid("cat-1"))
     assert categories[0]["name"] == "Groceries"
     assert categories[0]["category_group_name"] == "Monthly Bills"
 
@@ -67,8 +69,9 @@ async def test_list_category_groups_success(
     """Test successful category group listing."""
 
     category = ynab.Category(
-        id="cat-1",
-        category_group_id="group-1",
+        internal=False,
+        id=uid("cat-1"),
+        category_group_id=uid("group-1"),
         category_group_name="Monthly Bills",
         name="Test Category",
         hidden=False,
@@ -94,7 +97,8 @@ async def test_list_category_groups_success(
     )
 
     category_group = ynab.CategoryGroupWithCategories(
-        id="group-1",
+        internal=False,
+        id=uid("group-1"),
         name="Monthly Bills",
         hidden=False,
         deleted=False,
@@ -111,7 +115,7 @@ async def test_list_category_groups_success(
     assert isinstance(groups_data, list)
     assert len(groups_data) == 1
     group = groups_data[0]
-    assert group["id"] == "group-1"
+    assert group["id"] == str(uid("group-1"))
     assert group["name"] == "Monthly Bills"
 
 
@@ -122,9 +126,10 @@ async def test_list_categories_filters_deleted_and_hidden(
 
     # Active category (should be included)
     mock_active_category = ynab.Category(
-        id="cat-active",
+        internal=False,
+        id=uid("cat-active"),
         name="Active Category",
-        category_group_id="group-1",
+        category_group_id=uid("group-1"),
         hidden=False,
         deleted=False,
         note="Active",
@@ -143,9 +148,10 @@ async def test_list_categories_filters_deleted_and_hidden(
 
     # Hidden category (should be excluded)
     mock_hidden_category = ynab.Category(
-        id="cat-hidden",
+        internal=False,
+        id=uid("cat-hidden"),
         name="Hidden Category",
-        category_group_id="group-1",
+        category_group_id=uid("group-1"),
         hidden=True,
         deleted=False,
         note="Hidden",
@@ -164,9 +170,10 @@ async def test_list_categories_filters_deleted_and_hidden(
 
     # Deleted category (should be excluded)
     mock_deleted_category = ynab.Category(
-        id="cat-deleted",
+        internal=False,
+        id=uid("cat-deleted"),
         name="Deleted Category",
-        category_group_id="group-1",
+        category_group_id=uid("group-1"),
         hidden=False,
         deleted=True,
         note="Deleted",
@@ -184,7 +191,8 @@ async def test_list_categories_filters_deleted_and_hidden(
     )
 
     category_group = ynab.CategoryGroupWithCategories(
-        id="group-1",
+        internal=False,
+        id=uid("group-1"),
         name="Monthly Bills",
         hidden=False,
         deleted=False,
@@ -203,7 +211,7 @@ async def test_list_categories_filters_deleted_and_hidden(
     response_data = extract_response_data(result)
     # Should only include the active category
     assert len(response_data["categories"]) == 1
-    assert response_data["categories"][0]["id"] == "cat-active"
+    assert response_data["categories"][0]["id"] == str(uid("cat-active"))
     assert response_data["categories"][0]["name"] == "Active Category"
 
 
@@ -214,7 +222,8 @@ async def test_list_category_groups_filters_deleted(
 
     # Active group (should be included)
     active_group = ynab.CategoryGroupWithCategories(
-        id="group-active",
+        internal=False,
+        id=uid("group-active"),
         name="Active Group",
         hidden=False,
         deleted=False,
@@ -223,7 +232,8 @@ async def test_list_category_groups_filters_deleted(
 
     # Deleted group (should be excluded)
     deleted_group = ynab.CategoryGroupWithCategories(
-        id="group-deleted",
+        internal=False,
+        id=uid("group-deleted"),
         name="Deleted Group",
         hidden=False,
         deleted=True,
@@ -240,5 +250,5 @@ async def test_list_category_groups_filters_deleted(
     assert isinstance(response_data, list)
     assert len(response_data) == 1
     group = response_data[0]
-    assert group["id"] == "group-active"
+    assert group["id"] == str(uid("group-active"))
     assert group["name"] == "Active Group"

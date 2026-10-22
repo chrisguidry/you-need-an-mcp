@@ -7,16 +7,18 @@ Tests the update_category_budget and update_transaction tools.
 from datetime import date
 from typing import Any
 from unittest.mock import MagicMock
+from uuid import UUID
 
 import ynab
 from assertions import extract_response_data
 from fastmcp.client import Client, FastMCPTransport
+from ids import uid
 
 
 def create_ynab_category(
     *,
-    id: str = "cat-1",
-    category_group_id: str = "group-1",
+    id: UUID = uid("cat-1"),
+    category_group_id: UUID = uid("group-1"),
     budgeted: int = 100_000,  # $100.00
     activity: int = -50_000,  # -$50.00
     balance: int = 50_000,  # $50.00
@@ -24,6 +26,7 @@ def create_ynab_category(
 ) -> ynab.Category:
     """Create a YNAB Category for testing with sensible defaults."""
     return ynab.Category(
+        internal=False,
         id=id,
         category_group_id=category_group_id,
         category_group_name=kwargs.get("category_group_name", "Test Group"),
@@ -56,7 +59,7 @@ def create_ynab_transaction_detail(
     id: str = "txn-1",
     date: date = date(2024, 1, 15),
     amount: int = -50_000,  # -$50.00
-    account_id: str = "acc-1",
+    account_id: UUID = uid("acc-1"),
     **kwargs: Any,
 ) -> ynab.TransactionDetail:
     """Create a YNAB TransactionDetail for testing with sensible defaults."""
@@ -96,8 +99,8 @@ async def test_update_category_budget_success(
 
     # Create the updated category that will be returned
     updated_category = create_ynab_category(
-        id="cat-groceries",
-        category_group_id="group-everyday",
+        id=uid("cat-groceries"),
+        category_group_id=uid("group-everyday"),
         name="Groceries",
         budgeted=200_000,  # $200.00 (new budgeted amount)
         activity=-150_000,  # -$150.00
@@ -109,7 +112,8 @@ async def test_update_category_budget_success(
 
     # Mock the categories response for group names
     category_group = ynab.CategoryGroupWithCategories(
-        id="group-everyday",
+        internal=False,
+        id=uid("group-everyday"),
         name="Everyday Expenses",
         hidden=False,
         deleted=False,
@@ -123,7 +127,7 @@ async def test_update_category_budget_success(
     result = await mcp_client.call_tool(
         "update_category_budget",
         {
-            "category_id": "cat-groceries",
+            "category_id": str(uid("cat-groceries")),
             "budgeted": "200.00",
             "month": "current",
         },
@@ -132,7 +136,7 @@ async def test_update_category_budget_success(
     # Verify the response
     category_data = extract_response_data(result)
 
-    assert category_data["id"] == "cat-groceries"
+    assert category_data["id"] == str(uid("cat-groceries"))
     assert category_data["name"] == "Groceries"
     assert category_data["category_group_name"] == "Everyday Expenses"
     assert category_data["budgeted"] == "200"  # $200.00
@@ -142,7 +146,7 @@ async def test_update_category_budget_success(
     # Verify the repository was called correctly
     mock_repository.update_month_category.assert_called_once()
     call_args = mock_repository.update_month_category.call_args
-    assert call_args[0][0] == "cat-groceries"  # category_id
+    assert call_args[0][0] == str(uid("cat-groceries"))  # category_id
     assert call_args[0][1] == date(date.today().year, date.today().month, 1)
     assert call_args[0][2] == 200_000  # budgeted_milliunits
 
@@ -159,11 +163,11 @@ async def test_update_transaction_success(
         id="txn-123",
         date=date(2024, 1, 15),
         amount=-75_000,  # -$75.00
-        account_id="acc-checking",
+        account_id=uid("acc-checking"),
         account_name="Checking",
-        payee_id="payee-amazon",
+        payee_id=uid("payee-amazon"),
         payee_name="Amazon",
-        category_id="cat-household",  # Updated category
+        category_id=uid("cat-household"),  # Updated category
         category_name="Household Items",  # Updated category name
         memo="Amazon purchase - household items",  # Updated memo
         cleared=ynab.TransactionClearedStatus.CLEARED,
@@ -175,11 +179,11 @@ async def test_update_transaction_success(
         id="txn-123",
         date=date(2024, 1, 15),
         amount=-75_000,  # -$75.00
-        account_id="acc-checking",
+        account_id=uid("acc-checking"),
         account_name="Checking",
-        payee_id="payee-amazon",
+        payee_id=uid("payee-amazon"),
         payee_name="Amazon",
-        category_id="cat-food",  # Original category
+        category_id=uid("cat-food"),  # Original category
         category_name="Food",  # Original category name
         memo="Amazon purchase",  # Original memo
         cleared=ynab.TransactionClearedStatus.CLEARED,
@@ -195,7 +199,7 @@ async def test_update_transaction_success(
         "update_transaction",
         {
             "transaction_id": "txn-123",
-            "category_id": "cat-household",
+            "category_id": str(uid("cat-household")),
             "memo": "Amazon purchase - household items",
         },
     )
@@ -205,7 +209,7 @@ async def test_update_transaction_success(
 
     assert transaction_data["id"] == "txn-123"
     assert transaction_data["amount"] == "-75"  # -$75.00
-    assert transaction_data["category_id"] == "cat-household"
+    assert transaction_data["category_id"] == str(uid("cat-household"))
     assert transaction_data["category_name"] == "Household Items"
     assert transaction_data["memo"] == "Amazon purchase - household items"
     assert transaction_data["cleared"] == "cleared"
@@ -223,7 +227,7 @@ async def test_update_category_budget_with_specific_month(
     """Test category budget update for a specific month."""
 
     updated_category = create_ynab_category(
-        id="cat-dining",
+        id=uid("cat-dining"),
         name="Dining Out",
         budgeted=150_000,  # $150.00
     )
@@ -237,7 +241,8 @@ async def test_update_category_budget_with_specific_month(
 
     # Mock categories response for group names
     category_group = ynab.CategoryGroupWithCategories(
-        id="group-1",
+        internal=False,
+        id=uid("group-1"),
         name="Fun Money",
         hidden=False,
         deleted=False,
@@ -254,7 +259,7 @@ async def test_update_category_budget_with_specific_month(
     result = await mcp_client.call_tool(
         "update_category_budget",
         {
-            "category_id": "cat-dining",
+            "category_id": str(uid("cat-dining")),
             "budgeted": "150.00",
             "month": "2024-03-01",  # Specific month
         },
@@ -280,13 +285,13 @@ async def test_update_transaction_minimal_fields(
     # Mock the existing transaction response (what we fetch before updating)
     original_transaction = create_ynab_transaction_detail(
         id="txn-456",
-        category_id="cat-food",
+        category_id=uid("cat-food"),
         category_name="Food",
     )
 
     updated_transaction = create_ynab_transaction_detail(
         id="txn-456",
-        category_id="cat-gas",
+        category_id=uid("cat-gas"),
         category_name="Gas & Fuel",
     )
 
@@ -299,13 +304,13 @@ async def test_update_transaction_minimal_fields(
         "update_transaction",
         {
             "transaction_id": "txn-456",
-            "category_id": "cat-gas",
+            "category_id": str(uid("cat-gas")),
         },
     )
 
     # Verify the response
     transaction_data = extract_response_data(result)
-    assert transaction_data["category_id"] == "cat-gas"
+    assert transaction_data["category_id"] == str(uid("cat-gas"))
 
     # Verify the repository was called correctly
     mock_repository.get_transaction_by_id.assert_called_once_with("txn-456")
@@ -323,7 +328,7 @@ async def test_update_transaction_with_payee(
     original_transaction = create_ynab_transaction_detail(
         id="txn-789",
         amount=-25_500,  # -$25.50
-        payee_id="payee-generic",
+        payee_id=uid("payee-generic"),
         payee_name="Generic Store",
         memo="Store purchase",
     )
@@ -331,7 +336,7 @@ async def test_update_transaction_with_payee(
     updated_transaction = create_ynab_transaction_detail(
         id="txn-789",
         amount=-25_500,  # -$25.50
-        payee_id="payee-starbucks",
+        payee_id=uid("payee-starbucks"),
         payee_name="Starbucks",
         memo="Coffee run",
     )
@@ -345,14 +350,14 @@ async def test_update_transaction_with_payee(
         "update_transaction",
         {
             "transaction_id": "txn-789",
-            "payee_id": "payee-starbucks",
+            "payee_id": str(uid("payee-starbucks")),
             "memo": "Coffee run",
         },
     )
 
     # Verify the response
     transaction_data = extract_response_data(result)
-    assert transaction_data["payee_id"] == "payee-starbucks"
+    assert transaction_data["payee_id"] == str(uid("payee-starbucks"))
     assert transaction_data["memo"] == "Coffee run"
     assert transaction_data["amount"] == "-25.5"
 

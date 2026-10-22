@@ -7,6 +7,7 @@ from decimal import Decimal
 from unittest.mock import patch
 
 import pytest
+from ids import uid
 
 import server
 
@@ -145,9 +146,9 @@ def test_convert_transaction_to_model_basic() -> None:
         cleared=ynab.TransactionClearedStatus.CLEARED,
         approved=True,
         flag_color=ynab.TransactionFlagColor.RED,
-        account_id="acc-1",
-        payee_id="payee-1",
-        category_id="cat-1",
+        account_id=uid("acc-1"),
+        payee_id=uid("payee-1"),
+        category_id=uid("cat-1"),
         transfer_account_id=None,
         transfer_transaction_id=None,
         matched_transaction_id=None,
@@ -187,9 +188,9 @@ def test_convert_transaction_to_model_without_optional_attributes() -> None:
         cleared=ynab.TransactionClearedStatus.UNCLEARED,
         approved=True,
         flag_color=None,
-        account_id="acc-2",
-        payee_id="payee-2",
-        category_id="cat-2",
+        account_id=uid("acc-2"),
+        payee_id=uid("payee-2"),
+        category_id=uid("cat-2"),
         transfer_account_id=None,
         transfer_transaction_id=None,
         matched_transaction_id=None,

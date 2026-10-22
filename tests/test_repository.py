@@ -8,10 +8,12 @@ import time
 from datetime import date, datetime, timedelta
 from typing import Any
 from unittest.mock import MagicMock, patch
+from uuid import UUID
 
 import pytest
 import ynab
 from conftest import create_ynab_account, create_ynab_payee
+from ids import uid
 from ynab.exceptions import ConflictException
 
 from repository import YNABRepository
@@ -30,8 +32,8 @@ def repository() -> YNABRepository:
 
 def test_repository_initial_sync(repository: YNABRepository) -> None:
     """Test repository initial sync without server knowledge."""
-    account1 = create_ynab_account(id="acc-1", name="Checking")
-    account2 = create_ynab_account(id="acc-2", name="Savings")
+    account1 = create_ynab_account(id=uid("acc-1"), name="Checking")
+    account2 = create_ynab_account(id=uid("acc-2"), name="Savings")
 
     accounts_response = ynab.AccountsResponse(
         data=ynab.AccountsResponseData(
@@ -55,8 +57,8 @@ def test_repository_initial_sync(repository: YNABRepository) -> None:
     # Verify data was stored
     accounts = repository.get_accounts()
     assert len(accounts) == 2
-    assert accounts[0].id == "acc-1"
-    assert accounts[1].id == "acc-2"
+    assert accounts[0].id == uid("acc-1")
+    assert accounts[1].id == uid("acc-2")
 
     # Verify server knowledge was stored
     assert repository._server_knowledge["accounts"] == 100
@@ -66,14 +68,14 @@ def test_repository_initial_sync(repository: YNABRepository) -> None:
 def test_repository_delta_sync(repository: YNABRepository) -> None:
     """Test repository delta sync with server knowledge."""
     # Set up initial state
-    account1 = create_ynab_account(id="acc-1", name="Checking")
+    account1 = create_ynab_account(id=uid("acc-1"), name="Checking")
     repository._data["accounts"] = [account1]
     repository._server_knowledge["accounts"] = 100
     repository._last_sync = datetime.now()
 
     # Delta sync with updated account and new account
-    updated_account1 = create_ynab_account(id="acc-1", name="Updated Checking")
-    new_account = create_ynab_account(id="acc-2", name="New Savings")
+    updated_account1 = create_ynab_account(id=uid("acc-1"), name="Updated Checking")
+    new_account = create_ynab_account(id=uid("acc-2"), name="New Savings")
 
     delta_response = ynab.AccountsResponse(
         data=ynab.AccountsResponseData(
@@ -101,8 +103,8 @@ def test_repository_delta_sync(repository: YNABRepository) -> None:
     assert len(accounts) == 2
 
     # Find accounts by ID
-    acc1 = next(acc for acc in accounts if acc.id == "acc-1")
-    acc2 = next(acc for acc in accounts if acc.id == "acc-2")
+    acc1 = next(acc for acc in accounts if acc.id == uid("acc-1"))
+    acc2 = next(acc for acc in accounts if acc.id == uid("acc-2"))
 
     assert acc1.name == "Updated Checking"  # Updated
     assert acc2.name == "New Savings"  # Added
@@ -114,14 +116,14 @@ def test_repository_delta_sync(repository: YNABRepository) -> None:
 def test_repository_handles_deleted_accounts(repository: YNABRepository) -> None:
     """Test repository handles deleted accounts in delta sync."""
     # Set up initial state with two accounts
-    account1 = create_ynab_account(id="acc-1", name="Checking")
-    account2 = create_ynab_account(id="acc-2", name="Savings")
+    account1 = create_ynab_account(id=uid("acc-1"), name="Checking")
+    account2 = create_ynab_account(id=uid("acc-2"), name="Savings")
     repository._data["accounts"] = [account1, account2]
     repository._server_knowledge["accounts"] = 100
     repository._last_sync = datetime.now()
 
     # Delta with one deleted account
-    deleted_account = create_ynab_account(id="acc-2", name="Savings", deleted=True)
+    deleted_account = create_ynab_account(id=uid("acc-2"), name="Savings", deleted=True)
 
     delta_response = ynab.AccountsResponse(
         data=ynab.AccountsResponseData(accounts=[deleted_account], server_knowledge=110)
@@ -140,7 +142,7 @@ def test_repository_handles_deleted_accounts(repository: YNABRepository) -> None
     # Verify deleted account was removed
     accounts = repository.get_accounts()
     assert len(accounts) == 1
-    assert accounts[0].id == "acc-1"  # Only checking account remains
+    assert accounts[0].id == uid("acc-1")  # Only checking account remains
 
 
 def test_repository_fallback_to_full_refresh_on_error(
@@ -151,8 +153,8 @@ def test_repository_fallback_to_full_refresh_on_error(
     repository._server_knowledge["accounts"] = 100
     repository._last_sync = datetime.now()
 
-    account1 = create_ynab_account(id="acc-1", name="Checking")
-    account2 = create_ynab_account(id="acc-2", name="Savings")
+    account1 = create_ynab_account(id=uid("acc-1"), name="Checking")
+    account2 = create_ynab_account(id=uid("acc-2"), name="Savings")
 
     full_response = ynab.AccountsResponse(
         data=ynab.AccountsResponseData(
@@ -196,7 +198,7 @@ def test_repository_fallback_to_full_refresh_on_error(
 
 def test_repository_lazy_initialization(repository: YNABRepository) -> None:
     """Test repository initializes automatically when data is requested."""
-    account1 = create_ynab_account(id="acc-1", name="Checking")
+    account1 = create_ynab_account(id=uid("acc-1"), name="Checking")
 
     accounts_response = ynab.AccountsResponse(
         data=ynab.AccountsResponseData(accounts=[account1], server_knowledge=100)
@@ -221,14 +223,14 @@ def test_repository_lazy_initialization(repository: YNABRepository) -> None:
 
     # Verify data is available
     assert len(accounts) == 1
-    assert accounts[0].id == "acc-1"
+    assert accounts[0].id == uid("acc-1")
     assert repository.is_initialized()
 
 
 def test_repository_thread_safety(repository: YNABRepository) -> None:
     """Test repository operations are thread-safe."""
     # This test verifies the locking mechanism works
-    account1 = create_ynab_account(id="acc-1", name="Checking")
+    account1 = create_ynab_account(id=uid("acc-1"), name="Checking")
 
     accounts_response = ynab.AccountsResponse(
         data=ynab.AccountsResponseData(accounts=[account1], server_knowledge=100)
@@ -259,8 +261,8 @@ def test_repository_thread_safety(repository: YNABRepository) -> None:
 
 def test_repository_payees_initial_sync(repository: YNABRepository) -> None:
     """Test repository initial sync for payees without server knowledge."""
-    payee1 = create_ynab_payee(id="payee-1", name="Amazon")
-    payee2 = create_ynab_payee(id="payee-2", name="Starbucks")
+    payee1 = create_ynab_payee(id=uid("payee-1"), name="Amazon")
+    payee2 = create_ynab_payee(id=uid("payee-2"), name="Starbucks")
 
     payees_response = ynab.PayeesResponse(
         data=ynab.PayeesResponseData(payees=[payee1, payee2], server_knowledge=100)
@@ -282,8 +284,8 @@ def test_repository_payees_initial_sync(repository: YNABRepository) -> None:
     # Verify data was stored
     payees = repository.get_payees()
     assert len(payees) == 2
-    assert payees[0].id == "payee-1"
-    assert payees[1].id == "payee-2"
+    assert payees[0].id == uid("payee-1")
+    assert payees[1].id == uid("payee-2")
 
     # Verify server knowledge was stored
     assert repository._server_knowledge["payees"] == 100
@@ -292,14 +294,14 @@ def test_repository_payees_initial_sync(repository: YNABRepository) -> None:
 def test_repository_payees_delta_sync(repository: YNABRepository) -> None:
     """Test repository delta sync for payees with server knowledge."""
     # Set up initial state
-    payee1 = create_ynab_payee(id="payee-1", name="Amazon")
+    payee1 = create_ynab_payee(id=uid("payee-1"), name="Amazon")
     repository._data["payees"] = [payee1]
     repository._server_knowledge["payees"] = 100
     repository._last_sync = datetime.now()
 
     # Delta sync with updated payee and new payee
-    updated_payee1 = create_ynab_payee(id="payee-1", name="Amazon.com")
-    new_payee = create_ynab_payee(id="payee-2", name="Target")
+    updated_payee1 = create_ynab_payee(id=uid("payee-1"), name="Amazon.com")
+    new_payee = create_ynab_payee(id=uid("payee-2"), name="Target")
 
     delta_response = ynab.PayeesResponse(
         data=ynab.PayeesResponseData(
@@ -327,8 +329,8 @@ def test_repository_payees_delta_sync(repository: YNABRepository) -> None:
     assert len(payees) == 2
 
     # Find payees by ID
-    p1 = next(p for p in payees if p.id == "payee-1")
-    p2 = next(p for p in payees if p.id == "payee-2")
+    p1 = next(p for p in payees if p.id == uid("payee-1"))
+    p2 = next(p for p in payees if p.id == uid("payee-2"))
 
     assert p1.name == "Amazon.com"  # Updated
     assert p2.name == "Target"  # Added
@@ -340,14 +342,14 @@ def test_repository_payees_delta_sync(repository: YNABRepository) -> None:
 def test_repository_payees_handles_deleted(repository: YNABRepository) -> None:
     """Test repository handles deleted payees in delta sync."""
     # Set up initial state with two payees
-    payee1 = create_ynab_payee(id="payee-1", name="Amazon")
-    payee2 = create_ynab_payee(id="payee-2", name="Old Store")
+    payee1 = create_ynab_payee(id=uid("payee-1"), name="Amazon")
+    payee2 = create_ynab_payee(id=uid("payee-2"), name="Old Store")
     repository._data["payees"] = [payee1, payee2]
     repository._server_knowledge["payees"] = 100
     repository._last_sync = datetime.now()
 
     # Delta with one deleted payee
-    deleted_payee = create_ynab_payee(id="payee-2", name="Old Store", deleted=True)
+    deleted_payee = create_ynab_payee(id=uid("payee-2"), name="Old Store", deleted=True)
 
     delta_response = ynab.PayeesResponse(
         data=ynab.PayeesResponseData(payees=[deleted_payee], server_knowledge=110)
@@ -366,12 +368,12 @@ def test_repository_payees_handles_deleted(repository: YNABRepository) -> None:
     # Verify deleted payee was removed
     payees = repository.get_payees()
     assert len(payees) == 1
-    assert payees[0].id == "payee-1"  # Only Amazon remains
+    assert payees[0].id == uid("payee-1")  # Only Amazon remains
 
 
 def test_repository_payees_lazy_initialization(repository: YNABRepository) -> None:
     """Test payees repository initializes automatically when data is requested."""
-    payee1 = create_ynab_payee(id="payee-1", name="Amazon")
+    payee1 = create_ynab_payee(id=uid("payee-1"), name="Amazon")
 
     payees_response = ynab.PayeesResponse(
         data=ynab.PayeesResponseData(payees=[payee1], server_knowledge=100)
@@ -396,12 +398,12 @@ def test_repository_payees_lazy_initialization(repository: YNABRepository) -> No
 
     # Verify data is available
     assert len(payees) == 1
-    assert payees[0].id == "payee-1"
+    assert payees[0].id == uid("payee-1")
 
 
 def create_ynab_category_group(
     *,
-    id: str = "group-1",
+    id: UUID = uid("group-1"),
     name: str = "Test Group",
     deleted: bool = False,
     **kwargs: Any,
@@ -409,6 +411,7 @@ def create_ynab_category_group(
     """Create a YNAB CategoryGroupWithCategories for testing with sensible defaults."""
     categories = kwargs.get("categories", [])
     return ynab.CategoryGroupWithCategories(
+        internal=False,
         id=id,
         name=name,
         hidden=kwargs.get("hidden", False),
@@ -419,8 +422,8 @@ def create_ynab_category_group(
 
 def test_repository_category_groups_initial_sync(repository: YNABRepository) -> None:
     """Test repository initial sync for category groups without server knowledge."""
-    group1 = create_ynab_category_group(id="group-1", name="Monthly Bills")
-    group2 = create_ynab_category_group(id="group-2", name="Everyday Expenses")
+    group1 = create_ynab_category_group(id=uid("group-1"), name="Monthly Bills")
+    group2 = create_ynab_category_group(id=uid("group-2"), name="Everyday Expenses")
 
     categories_response = ynab.CategoriesResponse(
         data=ynab.CategoriesResponseData(
@@ -444,8 +447,8 @@ def test_repository_category_groups_initial_sync(repository: YNABRepository) -> 
     # Verify data was stored
     category_groups = repository.get_category_groups()
     assert len(category_groups) == 2
-    assert category_groups[0].id == "group-1"
-    assert category_groups[1].id == "group-2"
+    assert category_groups[0].id == uid("group-1")
+    assert category_groups[1].id == uid("group-2")
 
     # Verify server knowledge was stored
     assert repository._server_knowledge["category_groups"] == 100
@@ -454,14 +457,16 @@ def test_repository_category_groups_initial_sync(repository: YNABRepository) -> 
 def test_repository_category_groups_delta_sync(repository: YNABRepository) -> None:
     """Test repository delta sync for category groups with server knowledge."""
     # Set up initial state
-    group1 = create_ynab_category_group(id="group-1", name="Monthly Bills")
+    group1 = create_ynab_category_group(id=uid("group-1"), name="Monthly Bills")
     repository._data["category_groups"] = [group1]
     repository._server_knowledge["category_groups"] = 100
     repository._last_sync = datetime.now()
 
     # Delta sync with updated group and new group
-    updated_group1 = create_ynab_category_group(id="group-1", name="Fixed Expenses")
-    new_group = create_ynab_category_group(id="group-2", name="Variable Expenses")
+    updated_group1 = create_ynab_category_group(
+        id=uid("group-1"), name="Fixed Expenses"
+    )
+    new_group = create_ynab_category_group(id=uid("group-2"), name="Variable Expenses")
 
     delta_response = ynab.CategoriesResponse(
         data=ynab.CategoriesResponseData(
@@ -489,8 +494,8 @@ def test_repository_category_groups_delta_sync(repository: YNABRepository) -> No
     assert len(category_groups) == 2
 
     # Find groups by ID
-    g1 = next(g for g in category_groups if g.id == "group-1")
-    g2 = next(g for g in category_groups if g.id == "group-2")
+    g1 = next(g for g in category_groups if g.id == uid("group-1"))
+    g2 = next(g for g in category_groups if g.id == uid("group-2"))
 
     assert g1.name == "Fixed Expenses"  # Updated
     assert g2.name == "Variable Expenses"  # Added
@@ -502,15 +507,15 @@ def test_repository_category_groups_delta_sync(repository: YNABRepository) -> No
 def test_repository_category_groups_handles_deleted(repository: YNABRepository) -> None:
     """Test repository handles deleted category groups in delta sync."""
     # Set up initial state with two groups
-    group1 = create_ynab_category_group(id="group-1", name="Monthly Bills")
-    group2 = create_ynab_category_group(id="group-2", name="Old Category")
+    group1 = create_ynab_category_group(id=uid("group-1"), name="Monthly Bills")
+    group2 = create_ynab_category_group(id=uid("group-2"), name="Old Category")
     repository._data["category_groups"] = [group1, group2]
     repository._server_knowledge["category_groups"] = 100
     repository._last_sync = datetime.now()
 
     # Delta with one deleted group
     deleted_group = create_ynab_category_group(
-        id="group-2", name="Old Category", deleted=True
+        id=uid("group-2"), name="Old Category", deleted=True
     )
 
     delta_response = ynab.CategoriesResponse(
@@ -532,14 +537,14 @@ def test_repository_category_groups_handles_deleted(repository: YNABRepository) 
     # Verify deleted group was removed
     category_groups = repository.get_category_groups()
     assert len(category_groups) == 1
-    assert category_groups[0].id == "group-1"  # Only Monthly Bills remains
+    assert category_groups[0].id == uid("group-1")  # Only Monthly Bills remains
 
 
 def test_repository_category_groups_lazy_initialization(
     repository: YNABRepository,
 ) -> None:
     """Test category groups repository initializes automatically when data requested."""
-    group1 = create_ynab_category_group(id="group-1", name="Monthly Bills")
+    group1 = create_ynab_category_group(id=uid("group-1"), name="Monthly Bills")
 
     categories_response = ynab.CategoriesResponse(
         data=ynab.CategoriesResponseData(category_groups=[group1], server_knowledge=100)
@@ -564,13 +569,13 @@ def test_repository_category_groups_lazy_initialization(
 
     # Verify data is available
     assert len(category_groups) == 1
-    assert category_groups[0].id == "group-1"
+    assert category_groups[0].id == uid("group-1")
 
 
 def create_ynab_transaction(
     *,
     id: str = "txn-1",
-    account_id: str = "acc-1",
+    account_id: UUID = uid("acc-1"),
     amount: int = -50_000,  # -$50.00
     memo: str | None = "Test Transaction",
     cleared: str = "cleared",
@@ -786,7 +791,7 @@ def test_repository_conflict_exception_fallback(repository: YNABRepository) -> N
     repository._server_knowledge["accounts"] = 100
     repository._last_sync = datetime.now()
 
-    account1 = create_ynab_account(id="acc-1", name="Checking")
+    account1 = create_ynab_account(id=uid("acc-1"), name="Checking")
     full_response = ynab.AccountsResponse(
         data=ynab.AccountsResponseData(accounts=[account1], server_knowledge=120)
     )
@@ -815,7 +820,7 @@ def test_repository_conflict_exception_fallback(repository: YNABRepository) -> N
 
 def test_repository_rate_limit_retry_behavior(repository: YNABRepository) -> None:
     """Test that 429 rate limit triggers retry with exponential backoff."""
-    account1 = create_ynab_account(id="acc-1", name="Checking")
+    account1 = create_ynab_account(id=uid("acc-1"), name="Checking")
     success_response = ynab.AccountsResponse(
         data=ynab.AccountsResponseData(accounts=[account1], server_knowledge=100)
     )
@@ -889,7 +894,7 @@ def test_repository_background_sync_not_blocking(repository: YNABRepository) -> 
     repository._background_sync_enabled = True
 
     # Set up stale data
-    account1 = create_ynab_account(id="acc-1", name="Checking")
+    account1 = create_ynab_account(id=uid("acc-1"), name="Checking")
     repository._data["accounts"] = [account1]
     repository._last_sync = datetime.now() - timedelta(minutes=10)  # Stale
 
@@ -901,7 +906,7 @@ def test_repository_background_sync_not_blocking(repository: YNABRepository) -> 
 
             # Verify we got the stale data instantly
             assert len(accounts) == 1
-            assert accounts[0].id == "acc-1"
+            assert accounts[0].id == uid("acc-1")
 
             # Verify background sync was triggered
             mock_bg_sync.assert_called_once_with("accounts")
@@ -909,21 +914,21 @@ def test_repository_background_sync_not_blocking(repository: YNABRepository) -> 
 
 def test_repository_background_sync_error_handling(repository: YNABRepository) -> None:
     """Test that background sync errors don't crash or affect data access."""
-    account1 = create_ynab_account(id="acc-1", name="Checking")
+    account1 = create_ynab_account(id=uid("acc-1"), name="Checking")
     repository._data["accounts"] = [account1]
     repository._last_sync = datetime.now() - timedelta(minutes=10)  # Stale
 
     # Should still return existing data without crashing
     accounts = repository.get_accounts()
     assert len(accounts) == 1
-    assert accounts[0].id == "acc-1"
+    assert accounts[0].id == uid("acc-1")
 
 
 def test_repository_concurrent_access_safety(repository: YNABRepository) -> None:
     """Test that concurrent access to repository data is thread-safe."""
 
     # Set up initial data using the lock to ensure thread safety
-    account1 = create_ynab_account(id="acc-1", name="Checking")
+    account1 = create_ynab_account(id=uid("acc-1"), name="Checking")
     with repository._lock:
         repository._data["accounts"] = [account1]
         repository._last_sync = datetime.now()
@@ -991,7 +996,7 @@ def test_repository_concurrent_access_error_handling(
     """Test that errors in concurrent access are properly captured."""
 
     # Set up initial data
-    account1 = create_ynab_account(id="acc-1", name="Checking")
+    account1 = create_ynab_account(id=uid("acc-1"), name="Checking")
     with repository._lock:
         repository._data["accounts"] = [account1]
         repository._last_sync = datetime.now()
@@ -1021,7 +1026,7 @@ def test_repository_concurrent_access_error_handling(
 
 def test_repository_lazy_init_only_syncs_once(repository: YNABRepository) -> None:
     """Test that lazy initialization only syncs once even with concurrent access."""
-    account1 = create_ynab_account(id="acc-1", name="Checking")
+    account1 = create_ynab_account(id=uid("acc-1"), name="Checking")
     success_response = ynab.AccountsResponse(
         data=ynab.AccountsResponseData(accounts=[account1], server_knowledge=100)
     )
@@ -1071,7 +1076,7 @@ def test_repository_handles_empty_api_responses(repository: YNABRepository) -> N
 
 def test_repository_server_knowledge_progression(repository: YNABRepository) -> None:
     """Test that server knowledge progresses correctly through multiple syncs."""
-    account1 = create_ynab_account(id="acc-1", name="Checking")
+    account1 = create_ynab_account(id=uid("acc-1"), name="Checking")
 
     # First sync
     response1 = ynab.AccountsResponse(
@@ -1079,7 +1084,7 @@ def test_repository_server_knowledge_progression(repository: YNABRepository) -> 
     )
 
     # Second sync with higher knowledge
-    account2 = create_ynab_account(id="acc-2", name="Savings")
+    account2 = create_ynab_account(id=uid("acc-2"), name="Savings")
     response2 = ynab.AccountsResponse(
         data=ynab.AccountsResponseData(
             accounts=[account1, account2], server_knowledge=110
@@ -1114,8 +1119,8 @@ def test_repository_server_knowledge_progression(repository: YNABRepository) -> 
 def test_repository_mixed_entity_types_independent(repository: YNABRepository) -> None:
     """Test that different entity types sync independently."""
     # Set up different sync states for different entity types
-    account1 = create_ynab_account(id="acc-1", name="Checking")
-    payee1 = create_ynab_payee(id="payee-1", name="Amazon")
+    account1 = create_ynab_account(id=uid("acc-1"), name="Checking")
+    payee1 = create_ynab_payee(id=uid("payee-1"), name="Amazon")
 
     accounts_response = ynab.AccountsResponse(
         data=ynab.AccountsResponseData(accounts=[account1], server_knowledge=100)
@@ -1160,7 +1165,7 @@ def test_repository_background_sync_thread_safety(repository: YNABRepository) ->
     repository._background_sync_enabled = True
 
     # Set up initial stale data
-    account1 = create_ynab_account(id="acc-1", name="Checking")
+    account1 = create_ynab_account(id=uid("acc-1"), name="Checking")
     repository._data["accounts"] = [account1]
     repository._last_sync = datetime.now() - timedelta(minutes=10)  # Stale
 
@@ -1195,7 +1200,7 @@ def test_repository_preserves_data_during_failed_sync(
 ) -> None:
     """Test that existing data is preserved when sync fails."""
     # Set up initial good data
-    account1 = create_ynab_account(id="acc-1", name="Checking")
+    account1 = create_ynab_account(id=uid("acc-1"), name="Checking")
     repository._data["accounts"] = [account1]
     repository._server_knowledge["accounts"] = 100
     repository._last_sync = datetime.now()
@@ -1217,7 +1222,7 @@ def test_repository_preserves_data_during_failed_sync(
     # Original data should still be there
     accounts = repository.get_accounts()
     assert len(accounts) == 1
-    assert accounts[0].id == "acc-1"
+    assert accounts[0].id == uid("acc-1")
     assert repository._server_knowledge["accounts"] == 100
 
 
@@ -1244,13 +1249,13 @@ def test_repository_handles_malformed_api_responses(repository: YNABRepository) 
 def test_repository_sync_entity_atomic_updates(repository: YNABRepository) -> None:
     """Test that _sync_entity updates are atomic."""
     # Set up initial data
-    account1 = create_ynab_account(id="acc-1", name="Checking")
+    account1 = create_ynab_account(id=uid("acc-1"), name="Checking")
     repository._data["accounts"] = [account1]
     repository._server_knowledge["accounts"] = 100
     repository._last_sync = datetime.now()
 
     # Mock successful API call but failing delta application
-    account2 = create_ynab_account(id="acc-2", name="Savings")
+    account2 = create_ynab_account(id=uid("acc-2"), name="Savings")
     success_response = ynab.AccountsResponse(
         data=ynab.AccountsResponseData(
             accounts=[account1, account2], server_knowledge=110
@@ -1276,7 +1281,7 @@ def test_repository_sync_entity_atomic_updates(repository: YNABRepository) -> No
     # Original data should be unchanged due to atomic failure
     accounts = repository.get_accounts()
     assert len(accounts) == 1
-    assert accounts[0].id == "acc-1"
+    assert accounts[0].id == uid("acc-1")
     assert repository._server_knowledge["accounts"] == 100  # Should not be updated
 
 
@@ -1287,7 +1292,7 @@ def test_repository_handles_very_large_server_knowledge_values(
     # Test with a very large server knowledge value
     large_knowledge = 999_999_999_999
 
-    account1 = create_ynab_account(id="acc-1", name="Checking")
+    account1 = create_ynab_account(id=uid("acc-1"), name="Checking")
     response = ynab.AccountsResponse(
         data=ynab.AccountsResponseData(
             accounts=[account1], server_knowledge=large_knowledge
@@ -1329,7 +1334,7 @@ def test_repository_background_sync_respects_staleness_threshold(
 ) -> None:
     """Test that background sync only triggers when data is actually stale."""
     # Set up fresh data (not stale)
-    account1 = create_ynab_account(id="acc-1", name="Checking")
+    account1 = create_ynab_account(id=uid("acc-1"), name="Checking")
     repository._data["accounts"] = [account1]
     repository._last_sync = datetime.now() - timedelta(minutes=2)  # Fresh (< 5 minutes)
 
@@ -1339,7 +1344,7 @@ def test_repository_background_sync_respects_staleness_threshold(
 
         # Verify we got the data
         assert len(accounts) == 1
-        assert accounts[0].id == "acc-1"
+        assert accounts[0].id == uid("acc-1")
 
         # Verify background sync was NOT triggered
         mock_bg_sync.assert_not_called()

@@ -10,11 +10,13 @@ from datetime import date
 from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock, Mock, patch
+from uuid import UUID
 
 import fastmcp
 import pytest
 import ynab
 from fastmcp.client import Client, FastMCPTransport
+from ids import uid
 
 # Add parent directory to path to import server module
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -61,7 +63,7 @@ async def mcp_client() -> AsyncGenerator[Client[FastMCPTransport], None]:
 # Test data factories
 def create_ynab_account(
     *,
-    id: str = "acc-1",
+    id: UUID = uid("acc-1"),
     name: str = "Test Account",
     account_type: ynab.AccountType = ynab.AccountType.CHECKING,
     on_budget: bool = True,
@@ -81,7 +83,7 @@ def create_ynab_account(
         balance=balance,
         cleared_balance=kwargs.get("cleared_balance", balance - 5_000),
         uncleared_balance=kwargs.get("uncleared_balance", 5_000),
-        transfer_payee_id=kwargs.get("transfer_payee_id"),
+        transfer_payee_id=kwargs.get("transfer_payee_id", uid("transfer-payee")),
         direct_import_linked=kwargs.get("direct_import_linked", False),
         direct_import_in_error=kwargs.get("direct_import_in_error", False),
         last_reconciled_at=kwargs.get("last_reconciled_at"),
@@ -95,7 +97,7 @@ def create_ynab_account(
 
 def create_ynab_payee(
     *,
-    id: str = "payee-1",
+    id: UUID = uid("payee-1"),
     name: str = "Test Payee",
     deleted: bool = False,
     **kwargs: Any,
@@ -111,9 +113,9 @@ def create_ynab_payee(
 
 def create_ynab_category(
     *,
-    id: str = "cat-1",
+    id: UUID = uid("cat-1"),
     name: str = "Test Category",
-    category_group_id: str = "group-1",
+    category_group_id: UUID = uid("group-1"),
     hidden: bool = False,
     deleted: bool = False,
     budgeted: int = 50_000,
@@ -128,6 +130,7 @@ def create_ynab_category(
         category_group_name=kwargs.get("category_group_name"),
         name=name,
         hidden=hidden,
+        internal=kwargs.get("internal", False),
         original_category_group_id=kwargs.get("original_category_group_id"),
         note=kwargs.get("note"),
         budgeted=budgeted,
@@ -155,7 +158,7 @@ def create_ynab_transaction(
     id: str = "txn-1",
     transaction_date: date = date(2024, 1, 15),
     amount: int = -50_000,
-    account_id: str = "acc-1",
+    account_id: UUID = uid("acc-1"),
     deleted: bool = False,
     **kwargs: Any,
 ) -> ynab.TransactionDetail:

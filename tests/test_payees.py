@@ -8,6 +8,7 @@ import ynab
 from assertions import extract_response_data
 from conftest import create_ynab_payee
 from fastmcp.client import Client, FastMCPTransport
+from ids import uid
 
 
 async def test_list_payees_success(
@@ -15,21 +16,21 @@ async def test_list_payees_success(
 ) -> None:
     """Test successful payee listing."""
 
-    payee1 = create_ynab_payee(id="payee-1", name="Amazon")
-    payee2 = create_ynab_payee(id="payee-2", name="Whole Foods")
+    payee1 = create_ynab_payee(id=uid("payee-1"), name="Amazon")
+    payee2 = create_ynab_payee(id=uid("payee-2"), name="Whole Foods")
 
     # Deleted payee should be excluded by default
     payee_deleted = create_ynab_payee(
-        id="payee-deleted",
+        id=uid("payee-deleted"),
         name="Closed Store",
         deleted=True,
     )
 
     # Transfer payee
     payee_transfer = create_ynab_payee(
-        id="payee-transfer",
+        id=uid("payee-transfer"),
         name="Transfer : Savings",
-        transfer_account_id="acc-savings",
+        transfer_account_id=str(uid("acc-savings")),
     )
 
     # Mock repository to return test payees
@@ -53,7 +54,7 @@ async def test_list_payees_success(
 
     # Check transfer payee details
     transfer_payee = response_data["payees"][1]
-    assert transfer_payee["id"] == "payee-transfer"
+    assert transfer_payee["id"] == str(uid("payee-transfer"))
 
     # Check pagination
     assert response_data["pagination"]["total_count"] == 3
@@ -69,7 +70,7 @@ async def test_list_payees_pagination(
     payees = []
     for i in range(5):
         payee = ynab.Payee(
-            id=f"payee-{i}",
+            id=uid(f"payee-{i}"),
             name=f"Store {i:02d}",  # Store 00, Store 01, etc. for predictable sorting
             transfer_account_id=None,
             deleted=False,
@@ -99,7 +100,7 @@ async def test_list_payees_filters_deleted(
 
     # Active payee (should be included)
     payee_active = ynab.Payee(
-        id="payee-active",
+        id=uid("payee-active"),
         name="Active Store",
         transfer_account_id=None,
         deleted=False,
@@ -107,7 +108,7 @@ async def test_list_payees_filters_deleted(
 
     # Deleted payee (should be excluded)
     payee_deleted = ynab.Payee(
-        id="payee-deleted",
+        id=uid("payee-deleted"),
         name="Deleted Store",
         transfer_account_id=None,
         deleted=True,
@@ -122,7 +123,7 @@ async def test_list_payees_filters_deleted(
     # Should only include the active payee
     assert len(response_data["payees"]) == 1
     assert response_data["payees"][0]["name"] == "Active Store"
-    assert response_data["payees"][0]["id"] == "payee-active"
+    assert response_data["payees"][0]["id"] == str(uid("payee-active"))
 
 
 async def test_find_payee_filters_deleted(
@@ -132,11 +133,11 @@ async def test_find_payee_filters_deleted(
 
     # Both payees have "amazon" in name, but one is deleted
     payee_active = ynab.Payee(
-        id="payee-active", name="Amazon", transfer_account_id=None, deleted=False
+        id=uid("payee-active"), name="Amazon", transfer_account_id=None, deleted=False
     )
 
     payee_deleted = ynab.Payee(
-        id="payee-deleted",
+        id=uid("payee-deleted"),
         name="Amazon Prime",
         transfer_account_id=None,
         deleted=True,
@@ -151,7 +152,7 @@ async def test_find_payee_filters_deleted(
     # Should only find the active Amazon payee, not the deleted one
     assert len(response_data["payees"]) == 1
     assert response_data["payees"][0]["name"] == "Amazon"
-    assert response_data["payees"][0]["id"] == "payee-active"
+    assert response_data["payees"][0]["id"] == str(uid("payee-active"))
 
 
 async def test_find_payee_success(
@@ -162,31 +163,31 @@ async def test_find_payee_success(
     # Create payees with different names for searching
     payees = [
         ynab.Payee(
-            id="payee-amazon",
+            id=uid("payee-amazon"),
             name="Amazon",
             transfer_account_id=None,
             deleted=False,
         ),
         ynab.Payee(
-            id="payee-amazon-web",
+            id=uid("payee-amazon-web"),
             name="Amazon Web Services",
             transfer_account_id=None,
             deleted=False,
         ),
         ynab.Payee(
-            id="payee-starbucks",
+            id=uid("payee-starbucks"),
             name="Starbucks",
             transfer_account_id=None,
             deleted=False,
         ),
         ynab.Payee(
-            id="payee-grocery",
+            id=uid("payee-grocery"),
             name="Whole Foods Market",
             transfer_account_id=None,
             deleted=False,
         ),
         ynab.Payee(
-            id="payee-deleted",
+            id=uid("payee-deleted"),
             name="Amazon Prime",
             transfer_account_id=None,
             deleted=True,
@@ -217,7 +218,7 @@ async def test_find_payee_case_insensitive(
 
     payees = [
         ynab.Payee(
-            id="payee-1",
+            id=uid("payee-1"),
             name="Starbucks Coffee",
             transfer_account_id=None,
             deleted=False,
@@ -255,7 +256,7 @@ async def test_find_payee_limit(
     for i in range(5):
         payees.append(
             ynab.Payee(
-                id=f"payee-{i}",
+                id=uid(f"payee-{i}"),
                 name=f"Store {i:02d}",  # Store 00, Store 01, etc.
                 transfer_account_id=None,
                 deleted=False,
@@ -287,7 +288,7 @@ async def test_find_payee_no_matches(
 
     payees = [
         ynab.Payee(
-            id="payee-1", name="Starbucks", transfer_account_id=None, deleted=False
+            id=uid("payee-1"), name="Starbucks", transfer_account_id=None, deleted=False
         )
     ]
 

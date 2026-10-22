@@ -10,6 +10,7 @@ from __future__ import annotations
 import datetime
 from decimal import Decimal
 from typing import TYPE_CHECKING
+from uuid import UUID
 
 import ynab
 from pydantic import BaseModel, Field
@@ -41,7 +42,7 @@ class Account(BaseModel):
     All amounts are in currency units with Decimal precision.
     """
 
-    id: str = Field(..., description="Unique account identifier")
+    id: UUID = Field(..., description="Unique account identifier")
     name: str = Field(..., description="User-defined account name")
     type: str = Field(
         ...,
@@ -126,9 +127,9 @@ class Account(BaseModel):
 class Category(BaseModel):
     """A YNAB category with budget and goal information."""
 
-    id: str = Field(..., description="Unique category identifier")
+    id: UUID = Field(..., description="Unique category identifier")
     name: str = Field(..., description="Category name")
-    category_group_id: str = Field(..., description="Category group ID")
+    category_group_id: UUID = Field(..., description="Category group ID")
     category_group_name: str | None = Field(None, description="Category group name")
     note: str | None = Field(None, description="Category notes")
     budgeted: Decimal | None = Field(None, description="Amount budgeted")
@@ -189,7 +190,7 @@ class Category(BaseModel):
 class CategoryGroup(BaseModel):
     """A YNAB category group with summary totals."""
 
-    id: str = Field(..., description="Unique category group identifier")
+    id: UUID = Field(..., description="Unique category group identifier")
     name: str = Field(..., description="Category group name")
     hidden: bool = Field(..., description="Whether hidden from budget view")
     category_count: int = Field(..., description="Number of categories in group")
@@ -298,11 +299,11 @@ class BaseTransaction(BaseModel):
         None,
         description="Flag as 'Name (Color)' format",
     )
-    account_id: str = Field(..., description="Account ID")
+    account_id: UUID = Field(..., description="Account ID")
     account_name: str | None = Field(None, description="Account name")
-    payee_id: str | None = Field(None, description="Payee ID")
+    payee_id: UUID | None = Field(None, description="Payee ID")
     payee_name: str | None = Field(None, description="Payee name")
-    category_id: str | None = Field(None, description="Category ID")
+    category_id: UUID | None = Field(None, description="Category ID")
     category_name: str | None = Field(None, description="Category name")
 
 
@@ -312,21 +313,21 @@ class Subtransaction(BaseModel):
     id: str = Field(..., description="Unique subtransaction identifier")
     amount: Decimal | None = Field(None, description="Amount in currency units")
     memo: str | None = Field(None, description="Memo")
-    payee_id: str | None = Field(None, description="Payee ID")
+    payee_id: UUID | None = Field(None, description="Payee ID")
     payee_name: str | None = Field(None, description="Payee name")
-    category_id: str | None = Field(None, description="Category ID")
+    category_id: UUID | None = Field(None, description="Category ID")
     category_name: str | None = Field(None, description="Category name")
 
 
 class ScheduledSubtransaction(BaseModel):
     """A scheduled subtransaction within a split scheduled transaction."""
 
-    id: str = Field(..., description="Unique scheduled subtransaction identifier")
+    id: UUID = Field(..., description="Unique scheduled subtransaction identifier")
     amount: Decimal | None = Field(None, description="Amount in currency units")
     memo: str | None = Field(None, description="Memo")
-    payee_id: str | None = Field(None, description="Payee ID")
+    payee_id: UUID | None = Field(None, description="Payee ID")
     payee_name: str | None = Field(None, description="Payee name")
-    category_id: str | None = Field(None, description="Category ID")
+    category_id: UUID | None = Field(None, description="Category ID")
     category_name: str | None = Field(None, description="Category name")
 
 
@@ -461,7 +462,7 @@ class ScheduledTransaction(BaseTransaction):
                     )
 
         return cls(
-            id=st.id,
+            id=str(st.id),
             date_first=st.date_first,
             date_next=st.date_next,
             frequency=st.frequency,
@@ -488,7 +489,7 @@ class TransactionsResponse(BaseModel):
 class Payee(BaseModel):
     """A YNAB payee (person, company, or entity that receives payments)."""
 
-    id: str = Field(..., description="Unique payee identifier")
+    id: UUID = Field(..., description="Unique payee identifier")
     name: str = Field(..., description="Payee name")
 
     @classmethod

@@ -11,6 +11,7 @@ from assertions import extract_response_data
 from conftest import create_ynab_transaction
 from fastmcp.client import Client, FastMCPTransport
 from fastmcp.exceptions import ToolError
+from ids import uid
 
 
 async def test_list_transactions_basic(
@@ -25,9 +26,9 @@ async def test_list_transactions_basic(
         memo="Grocery shopping",
         flag_color=ynab.TransactionFlagColor.RED,
         account_name="Checking",
-        payee_id="payee-1",
+        payee_id=uid("payee-1"),
         payee_name="Whole Foods",
-        category_id="cat-1",
+        category_id=uid("cat-1"),
         category_name="Groceries",
     )
 
@@ -38,9 +39,9 @@ async def test_list_transactions_basic(
         memo="Dinner",
         cleared=ynab.TransactionClearedStatus.UNCLEARED,
         account_name="Checking",
-        payee_id="payee-2",
+        payee_id=uid("payee-2"),
         payee_name="Restaurant XYZ",
-        category_id="cat-2",
+        category_id=uid("cat-2"),
         category_name="Dining Out",
     )
 
@@ -51,9 +52,9 @@ async def test_list_transactions_basic(
         amount=-25_000,
         memo="Deleted transaction",
         account_name="Checking",
-        payee_id="payee-3",
+        payee_id=uid("payee-3"),
         payee_name="Store ABC",
-        category_id="cat-1",
+        category_id=uid("cat-1"),
         category_name="Groceries",
         deleted=True,  # Should be excluded
     )
@@ -96,11 +97,11 @@ async def test_list_transactions_with_account_filter(
         transaction_date=date(2024, 2, 1),
         amount=-30_000,
         memo="Account filtered",
-        account_id="acc-checking",
+        account_id=uid("acc-checking"),
         account_name="Main Checking",
-        payee_id="payee-1",
+        payee_id=uid("payee-1"),
         payee_name="Store",
-        category_id="cat-1",
+        category_id=uid("cat-1"),
         category_name="Shopping",
     )
 
@@ -108,16 +109,16 @@ async def test_list_transactions_with_account_filter(
     mock_repository.get_transactions_by_filters.return_value = [txn]
 
     result = await mcp_client.call_tool(
-        "list_transactions", {"account_id": "acc-checking"}
+        "list_transactions", {"account_id": str(uid("acc-checking"))}
     )
 
     response_data = extract_response_data(result)
     assert len(response_data["transactions"]) == 1
-    assert response_data["transactions"][0]["account_id"] == "acc-checking"
+    assert response_data["transactions"][0]["account_id"] == str(uid("acc-checking"))
 
     # Verify correct repository method was called
     mock_repository.get_transactions_by_filters.assert_called_once_with(
-        account_id="acc-checking",
+        account_id=str(uid("acc-checking")),
         category_id=None,
         payee_id=None,
         since_date=None,
@@ -135,9 +136,9 @@ async def test_list_transactions_with_amount_filters(
         transaction_date=date(2024, 3, 1),
         amount=-25_000,  # -$25
         memo="Small purchase",
-        payee_id="payee-1",
+        payee_id=uid("payee-1"),
         payee_name="Coffee Shop",
-        category_id="cat-1",
+        category_id=uid("cat-1"),
         category_name="Dining Out",
     )
 
@@ -146,9 +147,9 @@ async def test_list_transactions_with_amount_filters(
         transaction_date=date(2024, 3, 2),
         amount=-60_000,  # -$60
         memo="Medium purchase",
-        payee_id="payee-2",
+        payee_id=uid("payee-2"),
         payee_name="Restaurant",
-        category_id="cat-1",
+        category_id=uid("cat-1"),
         category_name="Dining Out",
     )
 
@@ -157,9 +158,9 @@ async def test_list_transactions_with_amount_filters(
         transaction_date=date(2024, 3, 3),
         amount=-120_000,  # -$120
         memo="Large purchase",
-        payee_id="payee-3",
+        payee_id=uid("payee-3"),
         payee_name="Electronics Store",
-        category_id="cat-2",
+        category_id=uid("cat-2"),
         category_name="Shopping",
     )
 
@@ -221,7 +222,7 @@ async def test_list_transactions_with_subtransactions(
         memo="Groceries portion",
         payee_id=None,
         payee_name=None,
-        category_id="cat-groceries",
+        category_id=uid("cat-groceries"),
         category_name="Groceries",
         transfer_account_id=None,
         transfer_transaction_id=None,
@@ -235,7 +236,7 @@ async def test_list_transactions_with_subtransactions(
         memo="Household items",
         payee_id=None,
         payee_name=None,
-        category_id="cat-household",
+        category_id=uid("cat-household"),
         category_name="Household",
         transfer_account_id=None,
         transfer_transaction_id=None,
@@ -250,7 +251,7 @@ async def test_list_transactions_with_subtransactions(
         memo="Deleted sub",
         payee_id=None,
         payee_name=None,
-        category_id="cat-other",
+        category_id=uid("cat-other"),
         category_name="Other",
         transfer_account_id=None,
         transfer_transaction_id=None,
@@ -263,7 +264,7 @@ async def test_list_transactions_with_subtransactions(
         transaction_date=date(2024, 4, 1),
         amount=-50_000,  # -$50 total
         memo="Split transaction at Target",
-        payee_id="payee-target",
+        payee_id=uid("payee-target"),
         payee_name="Target",
         category_id=None,  # Split transactions don't have a single category
         category_name=None,
@@ -305,9 +306,9 @@ async def test_list_transactions_pagination(
             transaction_date=date(2024, 1, i + 1),
             amount=-10_000 * (i + 1),
             memo=f"Transaction {i}",
-            payee_id=f"payee-{i}",
+            payee_id=uid(f"payee-{i}"),
             payee_name=f"Store {i}",
-            category_id="cat-1",
+            category_id=uid("cat-1"),
             category_name="Shopping",
         )
         transactions.append(txn)
@@ -350,9 +351,9 @@ async def test_list_transactions_with_category_filter(
         transaction_date=date(2024, 2, 1),
         amount=-40_000,
         memo="Category filtered",
-        payee_id="payee-1",
+        payee_id=uid("payee-1"),
         payee_name="Store",
-        category_id="cat-dining",
+        category_id=uid("cat-dining"),
         category_name="Dining Out",
     )
 
@@ -360,17 +361,17 @@ async def test_list_transactions_with_category_filter(
     mock_repository.get_transactions_by_filters.return_value = [txn]
 
     result = await mcp_client.call_tool(
-        "list_transactions", {"category_id": "cat-dining"}
+        "list_transactions", {"category_id": str(uid("cat-dining"))}
     )
 
     response_data = extract_response_data(result)
     assert len(response_data["transactions"]) == 1
-    assert response_data["transactions"][0]["category_id"] == "cat-dining"
+    assert response_data["transactions"][0]["category_id"] == str(uid("cat-dining"))
 
     # Verify correct repository method was called
     mock_repository.get_transactions_by_filters.assert_called_once_with(
         account_id=None,
-        category_id="cat-dining",
+        category_id=str(uid("cat-dining")),
         payee_id=None,
         since_date=None,
     )
@@ -387,9 +388,9 @@ async def test_list_transactions_with_payee_filter(
         transaction_date=date(2024, 3, 1),
         amount=-80_000,
         memo="Payee filtered",
-        payee_id="payee-amazon",
+        payee_id=uid("payee-amazon"),
         payee_name="Amazon",
-        category_id="cat-shopping",
+        category_id=uid("cat-shopping"),
         category_name="Shopping",
     )
 
@@ -397,18 +398,18 @@ async def test_list_transactions_with_payee_filter(
     mock_repository.get_transactions_by_filters.return_value = [txn]
 
     result = await mcp_client.call_tool(
-        "list_transactions", {"payee_id": "payee-amazon"}
+        "list_transactions", {"payee_id": str(uid("payee-amazon"))}
     )
 
     response_data = extract_response_data(result)
     assert len(response_data["transactions"]) == 1
-    assert response_data["transactions"][0]["payee_id"] == "payee-amazon"
+    assert response_data["transactions"][0]["payee_id"] == str(uid("payee-amazon"))
 
     # Verify correct repository method was called
     mock_repository.get_transactions_by_filters.assert_called_once_with(
         account_id=None,
         category_id=None,
-        payee_id="payee-amazon",
+        payee_id=str(uid("payee-amazon")),
         since_date=None,
     )
 
@@ -425,7 +426,7 @@ async def test_split_transaction_payee_inheritance(
         memo="Groceries portion",
         payee_id=None,  # Null payee_id
         payee_name=None,  # Null payee_name (the bug we're fixing)
-        category_id="cat-groceries",
+        category_id=uid("cat-groceries"),
         category_name="Groceries",
         transfer_account_id=None,
         transfer_transaction_id=None,
@@ -439,7 +440,7 @@ async def test_split_transaction_payee_inheritance(
         memo="Household items",
         payee_id=None,  # Null payee_id
         payee_name=None,  # Null payee_name (the bug we're fixing)
-        category_id="cat-household",
+        category_id=uid("cat-household"),
         category_name="Household",
         transfer_account_id=None,
         transfer_transaction_id=None,
@@ -452,7 +453,7 @@ async def test_split_transaction_payee_inheritance(
         transaction_date=date(2024, 8, 11),
         amount=-50_000,
         memo="Split transaction at Walmart",
-        payee_id="payee-walmart",
+        payee_id=uid("payee-walmart"),
         payee_name="Walmart",  # Parent has payee name
         category_id=None,  # Split transactions don't have single category
         category_name=None,
@@ -471,18 +472,22 @@ async def test_split_transaction_payee_inheritance(
     txn = response_data["transactions"][0]
     assert txn["id"] == "txn-split"
     assert txn["payee_name"] == "Walmart"  # Parent should have payee name
-    assert txn["payee_id"] == "payee-walmart"
+    assert txn["payee_id"] == str(uid("payee-walmart"))
 
     # Both subtransactions should inherit parent payee info
     assert len(txn["subtransactions"]) == 2
 
     assert txn["subtransactions"][0]["id"] == "sub-1"
     assert txn["subtransactions"][0]["payee_name"] == "Walmart"  # Inherited!
-    assert txn["subtransactions"][0]["payee_id"] == "payee-walmart"  # Inherited!
+    assert txn["subtransactions"][0]["payee_id"] == str(
+        uid("payee-walmart")
+    )  # Inherited!
 
     assert txn["subtransactions"][1]["id"] == "sub-2"
     assert txn["subtransactions"][1]["payee_name"] == "Walmart"  # Inherited!
-    assert txn["subtransactions"][1]["payee_id"] == "payee-walmart"  # Inherited!
+    assert txn["subtransactions"][1]["payee_id"] == str(
+        uid("payee-walmart")
+    )  # Inherited!
 
 
 async def test_hybrid_transaction_subtransaction_payee_resolution(
@@ -504,11 +509,11 @@ async def test_hybrid_transaction_subtransaction_payee_resolution(
         approved=True,
         flag_color=None,
         flag_name=None,
-        account_id="914dcb14-13da-49d2-86de-ba241c48f047",
+        account_id=uid("914dcb14-13da-49d2-86de-ba241c48f047"),
         account_name="American Express",
         payee_id=None,  # Missing payee info (the bug)
         payee_name=None,  # Missing payee info (the bug)
-        category_id="cd7c0b0e-7895-4f9f-aa1e-b6e0a22020cd",
+        category_id=uid("cd7c0b0e-7895-4f9f-aa1e-b6e0a22020cd"),
         category_name="Groceries",
         transfer_account_id=None,
         transfer_transaction_id=None,
@@ -528,7 +533,7 @@ async def test_hybrid_transaction_subtransaction_payee_resolution(
         transaction_date=date(2025, 8, 11),
         amount=-339660,  # Total amount
         memo=None,
-        payee_id="payee-walmart",
+        payee_id=uid("payee-walmart"),
         payee_name="Walmart",  # Parent has the payee name
         category_id=None,
         category_name="Split",
@@ -552,7 +557,7 @@ async def test_hybrid_transaction_subtransaction_payee_resolution(
 
     # The key test: should have resolved parent payee info
     assert txn["payee_name"] == "Walmart"  # Resolved from parent!
-    assert txn["payee_id"] == "payee-walmart"  # Resolved from parent!
+    assert txn["payee_id"] == str(uid("payee-walmart"))  # Resolved from parent!
     assert (
         txn["parent_transaction_id"] == "5db47639-1867-41df-a807-23cc23b0ffe9"
     )  # Should surface parent ID
@@ -576,11 +581,11 @@ async def test_hybrid_transaction_with_missing_parent(
         approved=True,
         flag_color=None,
         flag_name=None,
-        account_id="acc-1",
+        account_id=uid("acc-1"),
         account_name="Test Account",
         payee_id=None,
         payee_name=None,
-        category_id="cat-1",
+        category_id=uid("cat-1"),
         category_name="Test Category",
         transfer_account_id=None,
         transfer_transaction_id=None,
@@ -603,7 +608,9 @@ async def test_hybrid_transaction_with_missing_parent(
 
     # Should raise an exception when parent lookup fails
     with pytest.raises(ToolError, match="Transaction not found"):
-        await mcp_client.call_tool("list_transactions", {"category_id": "cat-1"})
+        await mcp_client.call_tool(
+            "list_transactions", {"category_id": str(uid("cat-1"))}
+        )
 
 
 async def test_hybrid_transaction_parent_resolver_exception(
@@ -623,11 +630,11 @@ async def test_hybrid_transaction_parent_resolver_exception(
         approved=True,
         flag_color=None,
         flag_name=None,
-        account_id="acc-1",
+        account_id=uid("acc-1"),
         account_name="Test Account",
         payee_id=None,
         payee_name=None,
-        category_id="cat-1",
+        category_id=uid("cat-1"),
         category_name="Test Category",
         transfer_account_id=None,
         transfer_transaction_id=None,
@@ -648,7 +655,9 @@ async def test_hybrid_transaction_parent_resolver_exception(
 
     # Should raise an exception when parent lookup fails
     with pytest.raises(ToolError, match="Database error"):
-        await mcp_client.call_tool("list_transactions", {"category_id": "cat-1"})
+        await mcp_client.call_tool(
+            "list_transactions", {"category_id": str(uid("cat-1"))}
+        )
 
 
 async def test_hybrid_transaction_parent_with_null_payee(
@@ -668,11 +677,11 @@ async def test_hybrid_transaction_parent_with_null_payee(
         approved=True,
         flag_color=None,
         flag_name=None,
-        account_id="acc-1",
+        account_id=uid("acc-1"),
         account_name="Test Account",
         payee_id=None,
         payee_name=None,
-        category_id="cat-1",
+        category_id=uid("cat-1"),
         category_name="Test Category",
         transfer_account_id=None,
         transfer_transaction_id=None,
@@ -704,7 +713,9 @@ async def test_hybrid_transaction_parent_with_null_payee(
         parent_txn  # Parent found but has null payee
     )
 
-    result = await mcp_client.call_tool("list_transactions", {"category_id": "cat-1"})
+    result = await mcp_client.call_tool(
+        "list_transactions", {"category_id": str(uid("cat-1"))}
+    )
 
     response_data = extract_response_data(result)
     assert response_data is not None
