@@ -100,6 +100,7 @@ def list_accounts(budget_id: str | None = None, limit: int = 100, offset: int = 
     budget_id = budget_id_or_default(budget_id)
     ...
 
+
 # After
 @mcp.tool()
 def list_accounts(limit: int = 100, offset: int = 0):
@@ -121,7 +122,7 @@ mcp = FastMCP[None](
     Access to your YNAB budget data including accounts, categories, and transactions.
     The server operates on the budget configured via YNAB_BUDGET environment variable.
     All data is served from a local repository that syncs with YNAB in the background.
-    """
+    """,
 )
 ```
 
@@ -143,17 +144,18 @@ def list_accounts(budget_id: str | None = None):
 # Global repository instance for the configured budget
 _repository: YNABRepository | None = None
 
+
 def get_repository() -> YNABRepository:
     global _repository
     if _repository is None:
         budget_id = os.environ["YNAB_BUDGET"]  # Required at startup
         _repository = YNABRepository(
-            budget_id=budget_id,
-            api_client_factory=get_ynab_client
+            budget_id=budget_id, api_client_factory=get_ynab_client
         )
         # Initial sync to populate
         _repository.sync()
     return _repository
+
 
 @mcp.tool()
 def list_accounts(limit: int = 100, offset: int = 0):  # No budget_id parameter

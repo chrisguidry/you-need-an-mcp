@@ -33,7 +33,7 @@ def describe_api_error(error: ApiException) -> str:
     detail = None
     try:
         detail = json.loads(error.body or "")["error"]["detail"]
-    except (ValueError, KeyError, TypeError):
+    except ValueError, KeyError, TypeError:
         pass
     return f"YNAB returned {error.status}: {detail or error.reason or 'no detail'}"
 

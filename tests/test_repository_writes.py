@@ -32,7 +32,7 @@ def accounts_response(
 
 
 @pytest.fixture
-def accounts_api() -> Generator[MagicMock, None, None]:
+def accounts_api() -> Generator[MagicMock]:
     api = MagicMock(spec=ynab.AccountsApi)
     with patch("ynab.AccountsApi", return_value=api):
         yield api
