@@ -25,7 +25,7 @@ from repository import YNABRepository
 
 
 @pytest.fixture
-def mock_repository() -> Generator[MagicMock, None, None]:
+def mock_repository() -> Generator[MagicMock]:
     """Give every tool a mock repository in place of the one plan_repository builds.
 
     The mock has the real repository's interface, so a test that calls a method
@@ -39,7 +39,7 @@ def mock_repository() -> Generator[MagicMock, None, None]:
         yield repository
 
 
-def patched_api[T](api_class: type[T]) -> Generator[T, None, None]:
+def patched_api[T](api_class: type[T]) -> Generator[T]:
     """Replace one ynab API class with a mock that has its interface."""
     api = create_autospec(api_class, instance=True)
     with patch(f"ynab.{api_class.__name__}", return_value=api):
@@ -47,51 +47,49 @@ def patched_api[T](api_class: type[T]) -> Generator[T, None, None]:
 
 
 @pytest.fixture
-def accounts_api() -> Generator[ynab.AccountsApi, None, None]:
+def accounts_api() -> Generator[ynab.AccountsApi]:
     yield from patched_api(ynab.AccountsApi)
 
 
 @pytest.fixture
-def categories_api() -> Generator[ynab.CategoriesApi, None, None]:
+def categories_api() -> Generator[ynab.CategoriesApi]:
     yield from patched_api(ynab.CategoriesApi)
 
 
 @pytest.fixture
-def months_api() -> Generator[ynab.MonthsApi, None, None]:
+def months_api() -> Generator[ynab.MonthsApi]:
     yield from patched_api(ynab.MonthsApi)
 
 
 @pytest.fixture
-def money_movements_api() -> Generator[ynab.MoneyMovementsApi, None, None]:
+def money_movements_api() -> Generator[ynab.MoneyMovementsApi]:
     yield from patched_api(ynab.MoneyMovementsApi)
 
 
 @pytest.fixture
-def payees_api() -> Generator[ynab.PayeesApi, None, None]:
+def payees_api() -> Generator[ynab.PayeesApi]:
     yield from patched_api(ynab.PayeesApi)
 
 
 @pytest.fixture
-def plans_api() -> Generator[ynab.PlansApi, None, None]:
+def plans_api() -> Generator[ynab.PlansApi]:
     yield from patched_api(ynab.PlansApi)
 
 
 @pytest.fixture
-def transactions_api() -> Generator[ynab.TransactionsApi, None, None]:
+def transactions_api() -> Generator[ynab.TransactionsApi]:
     yield from patched_api(ynab.TransactionsApi)
 
 
 @pytest.fixture
-def scheduled_transactions_api() -> Generator[
-    ynab.ScheduledTransactionsApi, None, None
-]:
+def scheduled_transactions_api() -> Generator[ynab.ScheduledTransactionsApi]:
     yield from patched_api(ynab.ScheduledTransactionsApi)
 
 
 @pytest.fixture
 async def mcp_client(
     mock_repository: MagicMock,
-) -> AsyncGenerator[Client[FastMCPTransport], None]:
+) -> AsyncGenerator[Client[FastMCPTransport]]:
     """An MCP client connected in memory to the server, with a mock repository."""
     async with fastmcp.Client(server.mcp) as client:
         yield client

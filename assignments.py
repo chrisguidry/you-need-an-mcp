@@ -280,8 +280,9 @@ def list_money_movements(
         for movement in response.data.money_movements
     ]
     movements.sort(
-        key=lambda movement: movement.moved_at
-        or datetime.datetime.min.replace(tzinfo=datetime.UTC),
+        key=lambda movement: (
+            movement.moved_at or datetime.datetime.min.replace(tzinfo=datetime.UTC)
+        ),
         reverse=True,
     )
     page, pagination = paginate(movements, limit, offset)
