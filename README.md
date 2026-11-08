@@ -155,6 +155,17 @@ attach receipts to transactions.
 Every listing tool takes `limit` and `offset`.  Check `pagination.has_more`, and
 raise `offset` by `limit` to get the next page.
 
+## Container image
+
+The container image serves the MCP server over HTTP on port 9000.  Build it
+with `docker buildx bake`, which reads `docker-bake.hcl`, the same file CI
+publishes from:
+
+```bash
+docker buildx bake --load
+docker run --rm -p 9000:9000 ghcr.io/chrisguidry/you-need-an-mcp:dev
+```
+
 ## Security Note
 
 Keep your YNAB access token secure and never commit it to version control.  The
