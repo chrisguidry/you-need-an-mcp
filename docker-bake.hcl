@@ -17,7 +17,7 @@ variable "CREATED" { default = "" }
 
 # The keys that are the same for every image of the repository.
 variable "URL" { default = "https://github.com/chrisguidry/you-need-an-mcp" }
-variable "LICENSES" { default = "" }
+variable "LICENSES" { default = "MIT" }
 variable "VENDOR" { default = "Chris Guidry" }
 
 # oci returns the keys of one image: the commit's keys, the
