@@ -14,7 +14,7 @@ from conftest import create_ynab_transaction, transaction_response
 from fastmcp.client import Client, FastMCPTransport
 from ids import uid
 
-from transactions import Transaction
+from you_need_an_mcp.transactions import Transaction
 
 
 async def list_transaction_ids(

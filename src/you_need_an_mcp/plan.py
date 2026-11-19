@@ -14,8 +14,8 @@ from fastmcp.dependencies import Shared
 from fastmcp.tools import tool
 from pydantic import BaseModel, Field
 
-from effects import READ, READS
-from repository import YNABRepository, plan_repository
+from you_need_an_mcp.effects import READ, READS
+from you_need_an_mcp.repository import YNABRepository, plan_repository
 
 
 class CurrencyFormat(BaseModel):

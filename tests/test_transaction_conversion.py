@@ -10,7 +10,7 @@ import ynab
 from conftest import create_ynab_transaction
 from ids import uid
 
-from transactions import Subtransaction, Transaction, format_flag
+from you_need_an_mcp.transactions import Subtransaction, Transaction, format_flag
 
 
 @pytest.mark.parametrize(

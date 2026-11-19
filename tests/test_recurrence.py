@@ -6,7 +6,7 @@ from datetime import date
 
 import pytest
 
-from recurrence import UnknownRecurrence, add_months, next_occurrence
+from you_need_an_mcp.recurrence import UnknownRecurrence, add_months, next_occurrence
 
 
 @pytest.mark.parametrize(

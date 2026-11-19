@@ -20,10 +20,10 @@ from fastmcp.dependencies import Shared
 from fastmcp.tools import tool
 from pydantic import BaseModel, Field
 
-from currency import currency_to_milliunits, milliunits_to_currency
-from effects import READ, READS
-from pagination import PaginationInfo, paginate
-from repository import YNABRepository, plan_repository
+from you_need_an_mcp.currency import currency_to_milliunits, milliunits_to_currency
+from you_need_an_mcp.effects import READ, READS
+from you_need_an_mcp.pagination import PaginationInfo, paginate
+from you_need_an_mcp.repository import YNABRepository, plan_repository
 
 TransactionStatus = Literal["unapproved", "uncategorized"]
 

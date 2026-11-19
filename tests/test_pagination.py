@@ -4,7 +4,7 @@ Test paging through a list.
 
 import pytest
 
-from pagination import paginate
+from you_need_an_mcp.pagination import paginate
 
 
 @pytest.mark.parametrize(

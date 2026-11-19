@@ -11,7 +11,7 @@ from conftest import (
 )
 from ids import uid
 
-from repository import YNABRepository
+from you_need_an_mcp.repository import YNABRepository
 
 
 def test_repository_handles_empty_api_responses(repository: YNABRepository) -> None:

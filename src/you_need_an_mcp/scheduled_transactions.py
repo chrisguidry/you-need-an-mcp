@@ -22,12 +22,12 @@ from fastmcp.exceptions import ToolError
 from fastmcp.tools import tool
 from pydantic import BaseModel, Field
 
-from currency import currency_to_milliunits, milliunits_to_currency
-from effects import ADDS, READ, READS, REMOVES, SETS, WRITE
-from pagination import PaginationInfo, paginate
-from repository import YNABRepository, plan_repository
-from transaction_entry import FlagColor, transfer_payee
-from transactions import format_flag
+from you_need_an_mcp.currency import currency_to_milliunits, milliunits_to_currency
+from you_need_an_mcp.effects import ADDS, READ, READS, REMOVES, SETS, WRITE
+from you_need_an_mcp.pagination import PaginationInfo, paginate
+from you_need_an_mcp.repository import YNABRepository, plan_repository
+from you_need_an_mcp.transaction_entry import FlagColor, transfer_payee
+from you_need_an_mcp.transactions import format_flag
 
 Frequency = Literal[
     "never",

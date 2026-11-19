@@ -22,20 +22,20 @@ from fastmcp.exceptions import ToolError
 from fastmcp.tools import tool
 from pydantic import BaseModel, Field
 
-from currency import currency_to_milliunits
-from effects import ADJUSTS, WRITE
-from recurrence import UnknownRecurrence, next_occurrence
-from repository import YNABRepository, plan_repository
-from scheduled_transactions import (
+from you_need_an_mcp.currency import currency_to_milliunits
+from you_need_an_mcp.effects import ADJUSTS, WRITE
+from you_need_an_mcp.recurrence import UnknownRecurrence, next_occurrence
+from you_need_an_mcp.repository import YNABRepository, plan_repository
+from you_need_an_mcp.scheduled_transactions import (
     ScheduledTransaction,
     fetch_scheduled_transaction,
     put_scheduled,
     refuse_split,
 )
-from transaction_entry import CHANGED_BY_TRANSACTIONS
-from transactions import Transaction
+from you_need_an_mcp.transaction_entry import CHANGED_BY_TRANSACTIONS
+from you_need_an_mcp.transactions import Transaction
 
-logger = logging.getLogger(__name__)
+logger: logging.Logger = logging.getLogger(__name__)
 
 
 class EnteredScheduledTransaction(BaseModel):

@@ -9,7 +9,7 @@ from conftest import (
     create_ynab_transaction,
 )
 
-from repository import YNABRepository
+from you_need_an_mcp.repository import YNABRepository
 
 
 def seed_transactions(

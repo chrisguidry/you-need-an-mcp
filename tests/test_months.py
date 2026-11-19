@@ -13,7 +13,7 @@ from conftest import create_ynab_category, create_ynab_category_group
 from fastmcp.client import Client, FastMCPTransport
 from ids import uid
 
-from months import Month, resolve_month
+from you_need_an_mcp.months import Month, resolve_month
 
 
 @pytest.mark.parametrize(

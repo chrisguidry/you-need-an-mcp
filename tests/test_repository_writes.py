@@ -12,7 +12,7 @@ import ynab
 from conftest import Clock, create_ynab_account
 from ids import uid
 
-from repository import (
+from you_need_an_mcp.repository import (
     REQUEST_TIMEOUT_SECONDS,
     TimeoutApiClient,
     YNABRepository,

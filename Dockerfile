@@ -40,4 +40,4 @@ USER 65532:65532
 EXPOSE 9000
 
 ENTRYPOINT ["tini", "--"]
-CMD ["python", "-c", "import server; server.mcp.run(transport='http', host='0.0.0.0', port=9000)"]
+CMD ["python", "-c", "from you_need_an_mcp.server import mcp; mcp.run(transport='http', host='0.0.0.0', port=9000)"]

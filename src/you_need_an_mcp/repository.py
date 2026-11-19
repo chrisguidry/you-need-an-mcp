@@ -17,9 +17,9 @@ import ynab
 from ynab.exceptions import ApiException, ConflictException
 from ynab.rest import RESTResponse
 
-from ynab_errors import api_status
+from you_need_an_mcp.ynab_errors import api_status
 
-logger = logging.getLogger(__name__)
+logger: logging.Logger = logging.getLogger(__name__)
 
 # YNAB answers in well under a second.  A request that has not finished in
 # this long is stuck, and a tool that waits on it forever hangs its client.
@@ -42,6 +42,7 @@ class TimeoutApiClient(ynab.ApiClient):
         post_params: list[tuple[str, Any]] | None = None,
         _request_timeout: Any = None,
     ) -> RESTResponse:
+        """Send one request, with the default timeout unless the call sets one."""
         # The SDK leaves call_api's parameters unannotated.
         return super().call_api(  # pyright: ignore[reportUnknownMemberType]
             method,
@@ -65,7 +66,9 @@ class YNABRepository:
         clock: Callable[[], datetime] = datetime.now,
     ):
         self.plan_id = plan_id
-        self.configuration = ynab.Configuration(access_token=access_token)
+        self.configuration: ynab.Configuration = ynab.Configuration(
+            access_token=access_token
+        )
 
         # In-memory storage - generic dict for different entity types
         self._data: dict[str, list[Any]] = {}

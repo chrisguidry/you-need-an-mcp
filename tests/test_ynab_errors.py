@@ -9,7 +9,7 @@ from fastmcp.client import Client, FastMCPTransport
 from fastmcp.exceptions import ToolError
 from ynab.exceptions import ApiException
 
-from ynab_errors import describe_api_error
+from you_need_an_mcp.ynab_errors import describe_api_error
 
 
 @pytest.mark.parametrize(
