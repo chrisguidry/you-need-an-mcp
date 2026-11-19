@@ -1,10 +1,10 @@
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling", "hatch-vcs"]
 build-backend = "hatchling.build"
 
 [project]
 name = "you-need-an-mcp"
-version = "0.1.0"
+dynamic = ["version"]
 description = "MCP server for YNAB (You Need A Budget)"
 readme = "README.md"
 license = { file = "LICENSE" }
@@ -13,6 +13,9 @@ dependencies = ["fastmcp>=4.1.3", "pydantic>=2.11.5", "ynab>=4.4.1,<6"]
 
 [project.scripts]
 you-need-an-mcp = "you_need_an_mcp.server:mcp.run"
+
+[tool.hatch.version]
+source = "vcs"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/you_need_an_mcp"]
