@@ -5,12 +5,11 @@ YNAB.
 
 import threading
 from collections.abc import Generator
-from datetime import datetime, timedelta
 from unittest.mock import MagicMock, patch
 
 import pytest
 import ynab
-from conftest import create_ynab_account
+from conftest import Clock, create_ynab_account
 from ids import uid
 
 from repository import (
@@ -36,13 +35,6 @@ def accounts_api() -> Generator[MagicMock]:
     api = MagicMock(spec=ynab.AccountsApi)
     with patch("ynab.AccountsApi", return_value=api):
         yield api
-
-
-@pytest.fixture
-def repository() -> YNABRepository:
-    repository = YNABRepository(plan_id="test-plan", access_token="test-token")
-    repository._background_sync_enabled = False
-    return repository
 
 
 def test_a_read_after_a_write_runs_a_delta_sync_first(
@@ -99,15 +91,17 @@ def wait_for_background_syncs() -> None:
 
 
 def test_a_failed_background_sync_keeps_serving_what_is_cached(
-    repository: YNABRepository, accounts_api: MagicMock
+    clock: Clock, accounts_api: MagicMock
 ) -> None:
+    repository = YNABRepository(
+        plan_id="test-plan", access_token="test-token", clock=clock
+    )
     accounts_api.get_accounts.side_effect = [
         accounts_response([create_ynab_account(name="Checking")], 100),
         RuntimeError("YNAB is down"),
     ]
     repository.get_accounts()
-    repository._background_sync_enabled = True
-    repository._last_sync = datetime.now() - timedelta(minutes=10)
+    clock.advance(minutes=10)
 
     repository.get_accounts()
     wait_for_background_syncs()
@@ -124,10 +118,8 @@ def test_api_client_applies_a_default_timeout(
     given: float | tuple[float, float] | None,
     sent: float | tuple[float, float],
 ) -> None:
-    with (
-        patch.object(ynab.ApiClient, "call_api") as call_api,
-        TimeoutApiClient(ynab.Configuration(access_token="test")) as client,
-    ):
+    client = TimeoutApiClient(ynab.Configuration(access_token="test"))
+    with patch.object(ynab.ApiClient, "call_api") as call_api, client:
         client.call_api("GET", "https://api.ynab.com/v1/user", _request_timeout=given)
 
     assert call_api.call_args.kwargs["_request_timeout"] == sent

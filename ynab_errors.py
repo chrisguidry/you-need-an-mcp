@@ -23,19 +23,40 @@ from ynab.exceptions import ApiException
 logger = logging.getLogger(__name__)
 
 
+# The SDK leaves ApiException's status and reason unannotated, and types its
+# body as partly unknown, so these functions give the rest of the server typed
+# reads of them.
+
+
+def api_status(error: ApiException) -> int | None:
+    """The HTTP status that YNAB answered with."""
+    return error.status  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
+
+
+def api_reason(error: ApiException) -> str | None:
+    """The HTTP reason phrase that YNAB answered with."""
+    return error.reason  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
+
+
+def api_body(error: ApiException) -> str | None:
+    """The body of YNAB's answer, which holds its error detail as JSON."""
+    return error.body  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
+
+
 def describe_api_error(error: ApiException) -> str:
     """Describe a YNAB API error in one sentence, without the access token."""
-    if error.status == 401:
+    status = api_status(error)
+    if status == 401:
         return "YNAB did not accept the access token. Check YNAB_ACCESS_TOKEN."
-    if error.status == 429:
+    if status == 429:
         return "YNAB's rate limit is exhausted. Wait a few minutes and try again."
 
     detail = None
     try:
-        detail = json.loads(error.body or "")["error"]["detail"]
+        detail = json.loads(api_body(error) or "")["error"]["detail"]
     except ValueError, KeyError, TypeError:
         pass
-    return f"YNAB returned {error.status}: {detail or error.reason or 'no detail'}"
+    return f"YNAB returned {status}: {detail or api_reason(error) or 'no detail'}"
 
 
 class YNABErrorMiddleware(Middleware):
@@ -52,5 +73,5 @@ class YNABErrorMiddleware(Middleware):
             cause = error.__cause__
             if not isinstance(cause, ApiException):
                 raise
-            logger.warning("YNAB API error %s in %s", cause.status, context.method)
+            logger.warning("YNAB API error %s in %s", api_status(cause), context.method)
             raise ToolError(describe_api_error(cause)) from cause

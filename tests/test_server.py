@@ -14,7 +14,7 @@ async def tags_of_served_tools() -> list[set[str]]:
     module = runpy.run_module("server")
     async with fastmcp.Client(module["mcp"]) as client:
         tools = await client.list_tools()
-    return [set(tool.meta["fastmcp"]["tags"]) for tool in tools]
+    return [set((tool.meta or {})["fastmcp"]["tags"]) for tool in tools]
 
 
 async def test_every_tool_is_tagged_read_or_write() -> None:

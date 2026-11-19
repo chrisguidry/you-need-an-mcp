@@ -10,6 +10,7 @@ MCP (Model Context Protocol) server for YNAB (You Need A Budget) using FastMCP. 
 # Development
 uv sync --group dev        # Install all dependencies
 uv run pytest               # Run tests with coverage (100% required)
+uv run prek run --all-files  # Run the hooks: ruff, codespell, loq, pyright (strict)
 fastmcp run server.py:mcp  # Run MCP server
 
 # Authentication (required)

@@ -111,3 +111,21 @@ async def test_get_plan_has_no_name_when_the_plan_is_not_listed(
         },
         "date_format": "MM/DD/YYYY",
     }
+
+
+async def test_get_plan_has_no_formats_when_ynab_sends_none(
+    plans_api: MagicMock,
+    mcp_client: Client[FastMCPTransport],
+) -> None:
+    plans_api.get_plan_settings_by_id.return_value = ynab.PlanSettingsResponse(
+        data=ynab.PlanSettingsResponseData(
+            settings=ynab.PlanSettings(date_format=None, currency_format=None)
+        )
+    )
+    plans_api.get_plans.return_value = plan_summaries()
+
+    result = await mcp_client.call_tool("get_plan", {})
+
+    response = extract_response_data(result)
+    assert response["currency_format"] is None
+    assert response["date_format"] is None

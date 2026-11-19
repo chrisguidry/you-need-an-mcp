@@ -6,7 +6,7 @@ This module contains pytest fixtures for testing without calling the actual YNAB
 
 import sys
 from collections.abc import AsyncGenerator, Generator
-from datetime import date
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock, create_autospec, patch
@@ -37,6 +37,54 @@ def mock_repository() -> Generator[MagicMock]:
     repository.api.return_value.__enter__.return_value = MagicMock(spec=ynab.ApiClient)
     with patch("repository.YNABRepository", return_value=repository):
         yield repository
+
+
+class Clock:
+    """A clock that a test moves by hand, for the repository to read the time
+    from, so that whether data is stale does not depend on how long a test
+    takes."""
+
+    def __init__(self) -> None:
+        self.now = datetime(2024, 1, 15, 12, 0)
+
+    def __call__(self) -> datetime:
+        return self.now
+
+    def advance(self, minutes: float) -> None:
+        self.now += timedelta(minutes=minutes)
+
+
+@pytest.fixture
+def clock() -> Clock:
+    return Clock()
+
+
+@pytest.fixture
+def repository(clock: Clock) -> YNABRepository:
+    """A real repository with background sync off, so that no thread calls
+    YNAB behind a test's back."""
+    return YNABRepository(
+        plan_id="test-budget",
+        access_token="test-token",
+        background_sync=False,
+        clock=clock,
+    )
+
+
+def seed_accounts(
+    repository: YNABRepository,
+    accounts: list[ynab.Account],
+    server_knowledge: int = 100,
+) -> None:
+    """Load accounts into a repository the way a sync from YNAB does."""
+    api = create_autospec(ynab.AccountsApi, instance=True)
+    api.get_accounts.return_value = ynab.AccountsResponse(
+        data=ynab.AccountsResponseData(
+            accounts=accounts, server_knowledge=server_knowledge
+        )
+    )
+    with patch("ynab.AccountsApi", return_value=api):
+        repository.sync_accounts()
 
 
 def patched_api[T](api_class: type[T]) -> Generator[T]:
