@@ -8,13 +8,16 @@ import logging
 import os
 import threading
 import time
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Generator
 from contextlib import contextmanager
 from datetime import datetime
 from typing import Any
 
 import ynab
 from ynab.exceptions import ApiException, ConflictException
+from ynab.rest import RESTResponse
+
+from ynab_errors import api_status
 
 logger = logging.getLogger(__name__)
 
@@ -38,8 +41,9 @@ class TimeoutApiClient(ynab.ApiClient):
         body: Any = None,
         post_params: list[tuple[str, Any]] | None = None,
         _request_timeout: Any = None,
-    ) -> ynab.rest.RESTResponse:
-        return super().call_api(
+    ) -> RESTResponse:
+        # The SDK leaves call_api's parameters unannotated.
+        return super().call_api(  # pyright: ignore[reportUnknownMemberType]
             method,
             url,
             header_params=header_params,
@@ -52,7 +56,14 @@ class TimeoutApiClient(ynab.ApiClient):
 class YNABRepository:
     """Local repository for YNAB data with background differential sync."""
 
-    def __init__(self, plan_id: str, access_token: str):
+    def __init__(
+        self,
+        plan_id: str,
+        access_token: str,
+        *,
+        background_sync: bool = True,
+        clock: Callable[[], datetime] = datetime.now,
+    ):
         self.plan_id = plan_id
         self.configuration = ynab.Configuration(access_token=access_token)
 
@@ -63,8 +74,11 @@ class YNABRepository:
         self._last_sync: datetime | None = None
         self._stale: set[str] = set()
 
-        # Testing flag to disable background sync
-        self._background_sync_enabled = True
+        # Tests turn background sync off and give a clock they control, so
+        # that no thread races them and staleness does not depend on how
+        # long a test takes.
+        self._background_sync_enabled = background_sync
+        self._clock = clock
 
     def get_accounts(self) -> list[ynab.Account]:
         """Get all accounts from local repository."""
@@ -115,7 +129,7 @@ class YNABRepository:
             self._stale.update(entity_types)
 
     @contextmanager
-    def api(self) -> Iterator[ynab.ApiClient]:
+    def api(self) -> Generator[ynab.ApiClient]:
         """Open a YNAB API client that gives up on a request after a timeout."""
         with TimeoutApiClient(self.configuration) as api_client:
             yield api_client
@@ -262,7 +276,7 @@ class YNABRepository:
             # Update metadata
             self._server_knowledge[entity_type] = new_knowledge
             self._stale.discard(entity_type)
-            self._last_sync = datetime.now()
+            self._last_sync = self._clock()
 
     def _apply_deltas(self, entity_type: str, delta_entities: list[Any]) -> None:
         """Apply delta changes to an entity list."""
@@ -290,13 +304,18 @@ class YNABRepository:
         with self._lock:
             return self._last_sync
 
+    def server_knowledge(self, entity_type: str) -> int:
+        """The server knowledge of the last sync of an entity type, or 0."""
+        with self._lock:
+            return self._server_knowledge.get(entity_type, 0)
+
     def needs_sync(self, max_age_minutes: int = 5) -> bool:
         """Check if repository needs to be synced based on staleness."""
         with self._lock:
             if self._last_sync is None:
                 return True
 
-            age_minutes = (datetime.now() - self._last_sync).total_seconds() / 60
+            age_minutes = (self._clock() - self._last_sync).total_seconds() / 60
             return age_minutes > max_age_minutes
 
     def _trigger_background_sync(self, entity_type: str) -> None:
@@ -344,8 +363,9 @@ class YNABRepository:
             try:
                 return api_call()
             except ApiException as e:
-                if e.status != 429:
-                    logger.error(f"API error {e.status}: {e}")
+                status = api_status(e)
+                if status != 429:
+                    logger.error(f"API error {status}: {e}")
                     raise
                 if attempt >= max_retries - 1:
                     logger.error("Max retries exceeded for rate limiting")

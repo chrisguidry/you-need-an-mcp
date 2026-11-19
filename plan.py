@@ -38,10 +38,10 @@ class Plan(BaseModel):
     last_modified_on: datetime.datetime | None = Field(
         None, description="When anything in the plan last changed"
     )
-    currency_format: CurrencyFormat = Field(
+    currency_format: CurrencyFormat | None = Field(
         ..., description="How the plan writes amounts of money"
     )
-    date_format: str = Field(..., description="How the plan writes dates")
+    date_format: str | None = Field(..., description="How the plan writes dates")
 
 
 @tool(title="Get plan", tags={"plan", READ}, annotations=READS)
@@ -60,6 +60,7 @@ def get_plan(repository: YNABRepository = Shared(plan_repository)) -> Plan:
 
     summary = next((s for s in summaries if str(s.id) == repository.plan_id), None)
     currency = settings.currency_format
+    date_format = settings.date_format
     return Plan(
         id=repository.plan_id,
         name=summary.name if summary else None,
@@ -72,8 +73,10 @@ def get_plan(repository: YNABRepository = Shared(plan_repository)) -> Plan:
             decimal_digits=currency.decimal_digits,
             currency_symbol=currency.currency_symbol,
             symbol_first=currency.symbol_first,
-        ),
-        date_format=settings.date_format.format,
+        )
+        if currency
+        else None,
+        date_format=date_format.format if date_format else None,
     )
 
 

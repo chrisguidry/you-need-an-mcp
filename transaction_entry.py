@@ -116,7 +116,7 @@ class TransactionChange(BaseModel):
     )
 
 
-def transfer_payee(repository: YNABRepository, account_id: UUID) -> UUID:
+def transfer_payee(repository: YNABRepository, account_id: UUID) -> UUID | None:
     """The payee that moves money into an account."""
     for account in repository.get_accounts():
         if account.id == account_id and not account.deleted:

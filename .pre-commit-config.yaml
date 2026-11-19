@@ -9,22 +9,31 @@ repos:
       - id: check-toml
       - id: check-added-large-files
 
+  - repo: https://github.com/codespell-project/codespell
+    rev: v2.2.6
+    hooks:
+      - id: codespell
+
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.17.4
     hooks:
-      - id: ruff-format
       - id: ruff
-        args: [--fix, --exit-non-zero-on-fix]
+        args: [--fix, --exit-non-zero-on-fix, --show-fixes]
+      - id: ruff-format
 
-  - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.16.1
+  # The server is a set of top-level modules rather than a package, so there
+  # is no package for `pyright --verifytypes` to check.  One strict run covers
+  # the modules and the tests.
+  - repo: local
     hooks:
-      - id: mypy
-        additional_dependencies:
-          - types-requests
-          - pytest
-          - fastmcp
-          - pydantic
-          - "ynab>=4.4.1,<5"
-        args: [--strict, --show-error-codes]
-        files: \.py$
+      - id: loq
+        name: loq (file size limits)
+        entry: uv run loq
+        language: system
+        pass_filenames: false
+      - id: pyright
+        name: pyright (modules and tests)
+        entry: uv run pyright
+        language: system
+        types: [python]
+        pass_filenames: false

@@ -37,13 +37,15 @@ packages = [
 
 [dependency-groups]
 dev = [
-    "pytest>=8.4.0",
+    "codespell>=2.4.3",
+    "loq>=0.2.0",
+    "prek>=0.5.11",
+    "pyright>=1.1.414",
     "pytest-asyncio>=1.0.0",
     "pytest-cov>=6.2.1",
-    "pytest-xdist>=3.7.0",
     "pytest-env>=1.1.5",
-    "mypy>=1.8.0",
-    "pre-commit>=3.6.0",
+    "pytest-xdist>=3.7.0",
+    "pytest>=8.4.0",
     "ruff>=0.12.0",
 ]
 
@@ -76,14 +78,6 @@ env = [
 source = ["."]
 omit = [".venv/*"]
 
-[tool.mypy]
-python_version = "3.15"
-strict = true
-
-[[tool.mypy.overrides]]
-module = ["ynab", "ynab.*"]
-implicit_reexport = true
-
 [tool.ruff]
 target-version = "py315"
 
@@ -101,3 +95,13 @@ ignore = []
 
 [tool.ruff.lint.flake8-bugbear]
 extend-immutable-calls = ["ids.uid", "fastmcp.dependencies.Shared"]
+
+[tool.codespell]
+# SAV is how banks shorten "savings" in the payee names they send YNAB.
+ignore-words-list = "sav"
+
+[tool.pyright]
+include = ["*.py", "tests"]
+typeCheckingMode = "strict"
+venvPath = "."
+venv = ".venv"

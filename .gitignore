@@ -7,3 +7,4 @@ wheels/
 .venv
 .coverage
 .python-version
+.loq_cache

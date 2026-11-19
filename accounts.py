@@ -66,7 +66,7 @@ class Account(BaseModel):
     uncleared_balance: Decimal = Field(
         ..., description="Balance of uncleared transactions in currency units"
     )
-    transfer_payee_id: UUID = Field(
+    transfer_payee_id: UUID | None = Field(
         ...,
         description="Payee to use on a transaction that transfers into this account",
     )

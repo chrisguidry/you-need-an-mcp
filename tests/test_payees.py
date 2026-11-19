@@ -67,7 +67,7 @@ async def test_list_payees_pagination(
     """Test payee listing with pagination."""
 
     # Create multiple payees
-    payees = []
+    payees: list[ynab.Payee] = []
     for i in range(5):
         payee = ynab.Payee(
             id=uid(f"payee-{i}"),
@@ -252,7 +252,7 @@ async def test_find_payee_limit(
     """Test payee search with limit parameter."""
 
     # Create multiple payees with "store" in the name
-    payees = []
+    payees: list[ynab.Payee] = []
     for i in range(5):
         payees.append(
             ynab.Payee(

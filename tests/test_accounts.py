@@ -101,7 +101,7 @@ async def test_list_accounts_pagination(
     mcp_client: Client[FastMCPTransport],
 ) -> None:
     """Test account listing with pagination."""
-    accounts = []
+    accounts: list[ynab.Account] = []
     for i in range(5):
         accounts.append(
             create_ynab_account(
