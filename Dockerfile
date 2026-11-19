@@ -1,5 +1,10 @@
 FROM python:3.15-slim AS builder
 
+# git is a build dependency: hatch-vcs reads the version from the repository
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends git \
+    && rm -rf /var/lib/apt/lists/*
+
 # uv comes from its image by tag and digest, so Dependabot can bump it and
 # the final image never holds it.
 COPY --from=ghcr.io/astral-sh/uv:0.13.7@sha256:96f40d3904aad8d0bd010539001d36c8e2188b981e1334471a90c4a1d93bb490 /uv /uvx /bin/
@@ -14,6 +19,9 @@ ENV UV_COMPILE_BYTECODE=1 \
 WORKDIR /app
 COPY . .
 RUN uv sync --locked --no-dev
+
+# The final stage copies /app, and the history is not part of the image.
+RUN rm -rf /app/.git
 
 FROM python:3.15-slim
 
