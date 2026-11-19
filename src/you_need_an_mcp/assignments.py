@@ -21,13 +21,13 @@ from fastmcp.exceptions import ToolError
 from fastmcp.tools import tool
 from pydantic import BaseModel, Field
 
-from currency import currency_to_milliunits, milliunits_to_currency
-from effects import ADJUSTS, READ, READS, SETS, WRITE
-from months import Month, fetch_month_category, resolve_month
-from pagination import PaginationInfo, paginate
-from repository import YNABRepository, plan_repository
+from you_need_an_mcp.currency import currency_to_milliunits, milliunits_to_currency
+from you_need_an_mcp.effects import ADJUSTS, READ, READS, SETS, WRITE
+from you_need_an_mcp.months import Month, fetch_month_category, resolve_month
+from you_need_an_mcp.pagination import PaginationInfo, paginate
+from you_need_an_mcp.repository import YNABRepository, plan_repository
 
-logger = logging.getLogger(__name__)
+logger: logging.Logger = logging.getLogger(__name__)
 
 READY_TO_ASSIGN = "Ready to Assign"
 

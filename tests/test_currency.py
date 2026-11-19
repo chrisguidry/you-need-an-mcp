@@ -6,7 +6,11 @@ from decimal import Decimal
 
 import pytest
 
-from currency import currency_to_milliunits, milliunits_to_currency, optional_currency
+from you_need_an_mcp.currency import (
+    currency_to_milliunits,
+    milliunits_to_currency,
+    optional_currency,
+)
 
 
 @pytest.mark.parametrize(

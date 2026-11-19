@@ -7,7 +7,6 @@ This module contains pytest fixtures for testing without calling the actual YNAB
 import sys
 from collections.abc import AsyncGenerator, Generator
 from datetime import date, datetime, timedelta
-from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock, create_autospec, patch
 from uuid import UUID
@@ -18,10 +17,8 @@ import ynab
 from fastmcp.client import Client, FastMCPTransport
 from ids import uid
 
-# Add parent directory to path to import server module
-sys.path.insert(0, str(Path(__file__).parent.parent))
-import server
-from repository import YNABRepository
+from you_need_an_mcp import server
+from you_need_an_mcp.repository import YNABRepository
 
 
 @pytest.fixture
@@ -35,7 +32,7 @@ def mock_repository() -> Generator[MagicMock]:
     repository = create_autospec(YNABRepository, instance=True)
     repository.plan_id = "test_plan_id"
     repository.api.return_value.__enter__.return_value = MagicMock(spec=ynab.ApiClient)
-    with patch("repository.YNABRepository", return_value=repository):
+    with patch("you_need_an_mcp.repository.YNABRepository", return_value=repository):
         yield repository
 
 
@@ -132,6 +129,14 @@ def transactions_api() -> Generator[ynab.TransactionsApi]:
 @pytest.fixture
 def scheduled_transactions_api() -> Generator[ynab.ScheduledTransactionsApi]:
     yield from patched_api(ynab.ScheduledTransactionsApi)
+
+
+@pytest.fixture
+def server_unimported(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Take the server module out of sys.modules for one test, so the test can
+    execute it again with runpy.  runpy warns when it executes a package's
+    module that is already imported, and this conftest imports it."""
+    monkeypatch.delitem(sys.modules, "you_need_an_mcp.server")
 
 
 @pytest.fixture

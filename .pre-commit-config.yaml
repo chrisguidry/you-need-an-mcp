@@ -21,9 +21,6 @@ repos:
         args: [--fix, --exit-non-zero-on-fix, --show-fixes]
       - id: ruff-format
 
-  # The server is a set of top-level modules rather than a package, so there
-  # is no package for `pyright --verifytypes` to check.  One strict run covers
-  # the modules and the tests.
   - repo: local
     hooks:
       - id: loq
@@ -32,8 +29,14 @@ repos:
         language: system
         pass_filenames: false
       - id: pyright
-        name: pyright (modules and tests)
-        entry: uv run pyright
+        name: pyright (you_need_an_mcp package)
+        entry: uv run pyright --verifytypes you_need_an_mcp --ignoreexternal
+        language: system
+        types: [python]
+        pass_filenames: false
+      - id: pyright
+        name: pyright (source and tests)
+        entry: uv run pyright tests
         language: system
         types: [python]
         pass_filenames: false

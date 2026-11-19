@@ -20,10 +20,10 @@ from fastmcp.exceptions import ToolError
 from fastmcp.tools import tool
 from pydantic import BaseModel, Field
 
-from currency import currency_to_milliunits
-from effects import ADDS, REMOVES, SETS, WRITE
-from repository import YNABRepository, plan_repository
-from transactions import Transaction
+from you_need_an_mcp.currency import currency_to_milliunits
+from you_need_an_mcp.effects import ADDS, REMOVES, SETS, WRITE
+from you_need_an_mcp.repository import YNABRepository, plan_repository
+from you_need_an_mcp.transactions import Transaction
 
 FlagColor = Literal["red", "orange", "yellow", "green", "blue", "purple"]
 ClearedStatus = Literal["cleared", "uncleared", "reconciled"]

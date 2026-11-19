@@ -13,7 +13,7 @@ from fastmcp.client import Client, FastMCPTransport
 from fastmcp.exceptions import ToolError
 from ids import uid
 
-from transaction_entry import CHANGED_BY_TRANSACTIONS
+from you_need_an_mcp.transaction_entry import CHANGED_BY_TRANSACTIONS
 
 
 @pytest.fixture

@@ -19,7 +19,7 @@ from fastmcp.client import Client, FastMCPTransport
 from fastmcp.exceptions import ToolError
 from ids import uid
 
-from transaction_entry import CHANGED_BY_TRANSACTIONS
+from you_need_an_mcp.transaction_entry import CHANGED_BY_TRANSACTIONS
 
 # The rent is due on the last day of each month.  Its next date is the last
 # day of February, and the one after that is March 31, not March 29.

@@ -15,8 +15,8 @@ from conftest import (
 from ids import uid
 from ynab.exceptions import ConflictException
 
-from repository import YNABRepository
-from ynab_errors import api_status
+from you_need_an_mcp.repository import YNABRepository
+from you_need_an_mcp.ynab_errors import api_status
 
 
 def test_repository_conflict_exception_fallback(repository: YNABRepository) -> None:
@@ -218,7 +218,7 @@ def test_repository_error_logging_behavior(repository: YNABRepository) -> None:
 
     # Add test handler to repository logger
     test_handler = TestLogHandler()
-    repository_logger = logging.getLogger("repository")
+    repository_logger = logging.getLogger("you_need_an_mcp.repository")
     repository_logger.addHandler(test_handler)
     repository_logger.setLevel(logging.DEBUG)
 

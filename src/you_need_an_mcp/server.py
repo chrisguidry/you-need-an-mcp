@@ -11,18 +11,20 @@ import os
 from fastmcp import FastMCP
 from fastmcp.server.transforms.visibility import Visibility
 
-import accounts
-import assignments
-import categories
-import months
-import payees
-import plan
-import scheduled_entry
-import scheduled_transactions
-import transaction_entry
-import transactions
-from effects import WRITE
-from ynab_errors import YNABErrorMiddleware
+from you_need_an_mcp import (
+    accounts,
+    assignments,
+    categories,
+    months,
+    payees,
+    plan,
+    scheduled_entry,
+    scheduled_transactions,
+    transaction_entry,
+    transactions,
+)
+from you_need_an_mcp.effects import WRITE
+from you_need_an_mcp.ynab_errors import YNABErrorMiddleware
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"

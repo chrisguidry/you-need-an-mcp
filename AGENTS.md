@@ -10,8 +10,8 @@ MCP (Model Context Protocol) server for YNAB (You Need A Budget) using FastMCP. 
 # Development
 uv sync --group dev        # Install all dependencies
 uv run pytest               # Run tests with coverage (100% required)
-uv run prek run --all-files  # Run the hooks: ruff, codespell, loq, pyright (strict)
-fastmcp run server.py:mcp  # Run MCP server
+uv run prek run --all-files  # Run the hooks: ruff, codespell, loq, pyright (strict, plus --verifytypes on the package)
+uv run you-need-an-mcp     # Run MCP server
 
 # Authentication (required)
 export YNAB_ACCESS_TOKEN=your_token_here
@@ -58,9 +58,9 @@ export YNAB_READ_ONLY=1  # Optional: serve only the read tools
 
 ## Architecture
 
-Modules are organized by domain.  Each domain module holds its Pydantic
-models, its tools, and the YNAB calls they make, and exports its tools as
-`TOOLS`.
+The package lives in `src/you_need_an_mcp/`, and its modules are organized by
+domain.  Each domain module holds its Pydantic models, its tools, and the YNAB
+calls they make, and exports its tools as `TOOLS`.
 
 - `server.py` - The FastMCP server: instructions, middleware, the tools of every domain, and read-only mode
 - `plan.py`, `months.py`, `accounts.py`, `categories.py`, `assignments.py`, `payees.py`, `transactions.py`, `transaction_entry.py`, `scheduled_transactions.py`, `scheduled_entry.py` - The domains

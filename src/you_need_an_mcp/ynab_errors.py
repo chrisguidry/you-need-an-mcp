@@ -20,7 +20,7 @@ from fastmcp.server.middleware import CallNext, Middleware, MiddlewareContext
 from fastmcp.tools import ToolResult
 from ynab.exceptions import ApiException
 
-logger = logging.getLogger(__name__)
+logger: logging.Logger = logging.getLogger(__name__)
 
 
 # The SDK leaves ApiException's status and reason unannotated, and types its
@@ -67,6 +67,7 @@ class YNABErrorMiddleware(Middleware):
         context: MiddlewareContext[mt.CallToolRequestParams],
         call_next: CallNext[mt.CallToolRequestParams, ToolResult],
     ) -> ToolResult:
+        """Call the tool, and turn a YNAB API error it raises into a ToolError."""
         try:
             return await call_next(context)
         except ToolError as error:

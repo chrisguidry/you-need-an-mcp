@@ -15,9 +15,9 @@ from fastmcp.dependencies import Shared
 from fastmcp.tools import tool
 from pydantic import BaseModel, Field
 
-from effects import ADDS, READ, READS, SETS, WRITE
-from pagination import PaginationInfo, paginate
-from repository import YNABRepository, plan_repository
+from you_need_an_mcp.effects import ADDS, READ, READS, SETS, WRITE
+from you_need_an_mcp.pagination import PaginationInfo, paginate
+from you_need_an_mcp.repository import YNABRepository, plan_repository
 
 
 class Payee(BaseModel):

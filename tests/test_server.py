@@ -7,11 +7,13 @@ import runpy
 import fastmcp
 import pytest
 
-from effects import READ, WRITE
+from you_need_an_mcp.effects import READ, WRITE
+
+pytestmark = pytest.mark.usefixtures("server_unimported")
 
 
 async def tags_of_served_tools() -> list[set[str]]:
-    module = runpy.run_module("server")
+    module = runpy.run_module("you_need_an_mcp.server")
     async with fastmcp.Client(module["mcp"]) as client:
         tools = await client.list_tools()
     return [set((tool.meta or {})["fastmcp"]["tags"]) for tool in tools]
@@ -38,7 +40,7 @@ async def test_read_only_mode_serves_only_read_tools(
 async def test_parameter_descriptions_carry_no_docstring_indentation() -> None:
     """A wrapped Args line needs a 4-space hanging indent.  Aligned
     indentation survives FastMCP's docstring parsing and reaches the model."""
-    module = runpy.run_module("server")
+    module = runpy.run_module("you_need_an_mcp.server")
     async with fastmcp.Client(module["mcp"]) as client:
         tools = await client.list_tools()
 

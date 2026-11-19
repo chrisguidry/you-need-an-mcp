@@ -48,7 +48,7 @@ export YNAB_READ_ONLY=1
 ### 4. Run the Server
 
 ```bash
-uv run python server.py
+uv run you-need-an-mcp
 ```
 
 ### Windows / Managed Machines
@@ -63,7 +63,7 @@ run these PowerShell commands from the repository directory:
 ```powershell
 $env:YNAB_ACCESS_TOKEN = "<your-token>"
 $env:YNAB_PLAN = "<your-plan-id>"
-& .\.venv\Scripts\python.exe -m server
+& .\.venv\Scripts\python.exe -m you_need_an_mcp.server
 ```
 
 For a persistent tool installation of a version with module-launch support
@@ -74,7 +74,7 @@ installation path:
 ```powershell
 $toolDirectory = uv tool dir
 $python = Join-Path $toolDirectory "you-need-an-mcp\Scripts\python.exe"
-& $python -I -m server
+& $python -I -m you_need_an_mcp.server
 ```
 
 To register that installed environment with Claude Code, replace the placeholders
@@ -83,12 +83,12 @@ with your configuration:
 ```powershell
 claude mcp add ynab --scope user `
   -e "YNAB_ACCESS_TOKEN=<your-token>" -e "YNAB_PLAN=<your-plan-id>" `
-  -- $python -I -m server
+  -- $python -I -m you_need_an_mcp.server
 ```
 
 The module launch runs the same MCP server as the console-script entry point.
-For installed tools, `-I` prevents an unrelated `server.py` in the current
-directory from shadowing the installed module.
+For installed tools, `-I` prevents an unrelated `you_need_an_mcp` directory in
+the current directory from shadowing the installed package.
 It requires an installed environment and permission to execute its interpreter.
 If endpoint security also prevents installation or interpreter execution, use
 your organization's approved setup process.

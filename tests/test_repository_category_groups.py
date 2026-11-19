@@ -10,7 +10,7 @@ from conftest import (
 )
 from ids import uid
 
-from repository import YNABRepository
+from you_need_an_mcp.repository import YNABRepository
 
 
 def seed_category_groups(

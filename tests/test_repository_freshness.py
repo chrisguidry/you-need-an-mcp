@@ -17,7 +17,7 @@ from conftest import (
 )
 from ids import uid
 
-from repository import YNABRepository
+from you_need_an_mcp.repository import YNABRepository
 
 
 def background_syncing_repository(clock: Clock) -> YNABRepository:

@@ -18,11 +18,15 @@ from fastmcp.dependencies import Shared
 from fastmcp.tools import tool
 from pydantic import BaseModel, Field
 
-from categories import Category, category_group_names, visible_categories
-from currency import milliunits_to_currency
-from effects import READ, READS
-from pagination import PaginationInfo, paginate
-from repository import YNABRepository, plan_repository
+from you_need_an_mcp.categories import (
+    Category,
+    category_group_names,
+    visible_categories,
+)
+from you_need_an_mcp.currency import milliunits_to_currency
+from you_need_an_mcp.effects import READ, READS
+from you_need_an_mcp.pagination import PaginationInfo, paginate
+from you_need_an_mcp.repository import YNABRepository, plan_repository
 
 Month = datetime.date | Literal["current", "last", "next"]
 
